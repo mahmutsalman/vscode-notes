@@ -1,0 +1,171 @@
+{
+  "name": "notes",
+  "displayName": "Notes",
+  "description": "Visual note-taking extension for VS Code with screenshot support",
+  "version": "1.0.0",
+  "publisher": "notes-extension",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "notes",
+    "screenshots",
+    "documentation",
+    "productivity"
+  ],
+  "activationEvents": [
+    "onView:notes.notesView"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/icons/activity-bar-icon.svg",
+  "contributes": {
+    "commands": [
+      {
+        "command": "notes.newNote",
+        "title": "New Note",
+        "category": "Notes",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "notes.pasteImage",
+        "title": "Paste Image from Clipboard",
+        "category": "Notes",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "notes.searchNotes",
+        "title": "Search Notes",
+        "category": "Notes",
+        "icon": "$(search)"
+      },
+      {
+        "command": "notes.linkToCode",
+        "title": "Link to Current Code",
+        "category": "Notes",
+        "icon": "$(link)"
+      },
+      {
+        "command": "notes.deleteNote",
+        "title": "Delete Note",
+        "category": "Notes",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "notes.editNote",
+        "title": "Edit Note",
+        "category": "Notes",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "notes.refreshNotes",
+        "title": "Refresh Notes",
+        "category": "Notes",
+        "icon": "$(refresh)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "notes.newNote",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n"
+      },
+      {
+        "command": "notes.pasteImage",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
+      },
+      {
+        "command": "notes.searchNotes",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f"
+      },
+      {
+        "command": "notes.linkToCode",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "notes",
+          "title": "Notes",
+          "icon": "media/icons/activity-bar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "notes": [
+        {
+          "id": "notes.notesView",
+          "name": "Notes",
+          "icon": "media/icons/all-notes.svg",
+          "contextualTitle": "Notes"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "notes.newNote",
+          "when": "view == notes.notesView",
+          "group": "navigation"
+        },
+        {
+          "command": "notes.searchNotes",
+          "when": "view == notes.notesView",
+          "group": "navigation"
+        },
+        {
+          "command": "notes.refreshNotes",
+          "when": "view == notes.notesView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "notes.editNote",
+          "when": "view == notes.notesView && viewItem == note",
+          "group": "inline"
+        },
+        {
+          "command": "notes.deleteNote",
+          "when": "view == notes.notesView && viewItem == note",
+          "group": "inline"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "notes.linkToCode",
+          "group": "notes"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./dist/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "^18.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "typescript": "^4.9.4",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1",
+    "ts-loader": "^9.4.1"
+  },
+  "dependencies": {
+    "fuse.js": "^6.6.2",
+    "sharp": "^0.32.6"
+  }
+}
