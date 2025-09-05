@@ -206,9 +206,8 @@ export class WebviewProvider {
             
             // Create and save thumbnail
             const thumbnailBuffer = await this.imageService.createThumbnail(imageBuffer);
-            const thumbnailFilename = `thumb-${Date.now()}.jpg`;
+            const thumbnailFilename = path.basename(noteImage.thumbnail);
             await this.storageService.saveImage(noteId, thumbnailBuffer, thumbnailFilename);
-            noteImage.thumbnail = path.join('.notes', 'images', noteId, thumbnailFilename);
 
             // Add image to note
             note.addImage(noteImage);
@@ -217,10 +216,21 @@ export class WebviewProvider {
             // Update search index
             this.searchService.updateIndex(this.storageService.getIndex());
 
+            // Prepare image data with webview paths
+            const imageDataForWebview = {
+                ...noteImage,
+                webviewPath: panel.webview.asWebviewUri(
+                    vscode.Uri.file(this.storageService.getImagePath(noteId, noteImage.filename))
+                ).toString(),
+                thumbnailPath: panel.webview.asWebviewUri(
+                    vscode.Uri.file(this.storageService.getImagePath(noteId, path.basename(noteImage.thumbnail)))
+                ).toString()
+            };
+
             // Send success message to webview
             panel.webview.postMessage({
                 command: 'imageAdded',
-                data: { image: noteImage }
+                data: { image: imageDataForWebview }
             });
 
             vscode.window.showInformationMessage('Image added successfully');
@@ -435,7 +445,7 @@ export class WebviewProvider {
             <div class="images-grid">
                 ${images.map(img => `
                     <div class="image-item" data-image-id="${img.id}">
-                        <img src="${img.thumbnailPath}" alt="${this.escapeHtml(img.caption || 'Note image')}" class="thumbnail" />
+                        <img src="${img.thumbnailPath}" alt="${this.escapeHtml(img.caption || 'Note image')}" class="thumbnail" data-full-image="${img.webviewPath}" />
                         <div class="image-controls">
                             <button class="btn-small btn-danger remove-image" data-image-id="${img.id}">
                                 Remove

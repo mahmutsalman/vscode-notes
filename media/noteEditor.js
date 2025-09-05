@@ -213,7 +213,7 @@
             <div class="images-grid">
                 ${images.map(img => `
                     <div class="image-item" data-image-id="${img.id}">
-                        <img src="${img.thumbnailPath || img.webviewPath}" alt="${escapeHtml(img.caption || 'Note image')}" class="thumbnail" />
+                        <img src="${img.thumbnailPath || img.webviewPath}" alt="${escapeHtml(img.caption || 'Note image')}" class="thumbnail" data-full-image="${img.webviewPath}" />
                         <div class="image-controls">
                             <button class="btn-small btn-danger remove-image" data-image-id="${img.id}">
                                 <img src="${iconUri}/delete.svg" alt="Remove" />
@@ -366,12 +366,42 @@
         `;
         
         const fullImage = document.createElement('img');
-        fullImage.src = thumbnail.src.replace('/thumb-', '/image-');
+        
+        // Try to get the full image path from data attribute first
+        let fullImageSrc = thumbnail.dataset.fullImage;
+        
+        // Fallback: try to construct from thumbnail src
+        if (!fullImageSrc) {
+            console.warn('⚠️ No data-full-image attribute found, trying fallback method');
+            fullImageSrc = thumbnail.src.replace('/thumb-', '/image-');
+            
+            // Additional fallback: try replacing .jpg with .png for clipboard images
+            if (fullImageSrc.includes('/image-') && fullImageSrc.endsWith('.jpg')) {
+                fullImageSrc = fullImageSrc.replace('.jpg', '.png');
+            }
+        }
+        
+        console.log('🖼️ Viewing full image:', fullImageSrc);
+        fullImage.src = fullImageSrc;
+        
         fullImage.style.cssText = `
             max-width: 90%;
             max-height: 90%;
             object-fit: contain;
         `;
+        
+        // Handle image load errors
+        fullImage.onerror = function() {
+            console.error('❌ Failed to load full image:', fullImageSrc);
+            // Try alternative extensions
+            if (fullImageSrc.endsWith('.png')) {
+                console.log('🔄 Trying .jpg extension instead');
+                fullImage.src = fullImageSrc.replace('.png', '.jpg');
+            } else if (fullImageSrc.endsWith('.jpg')) {
+                console.log('🔄 Trying .png extension instead');
+                fullImage.src = fullImageSrc.replace('.jpg', '.png');
+            }
+        };
         
         overlay.appendChild(fullImage);
         document.body.appendChild(overlay);
