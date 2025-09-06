@@ -496,4 +496,22 @@ export class WebviewProvider {
             ? workspaceFolders[0].uri.fsPath 
             : undefined;
     }
+
+    public getActiveNotePanel(): vscode.WebviewPanel | undefined {
+        // Find the most recently focused panel (last one in the map is usually the active one)
+        const panelEntries = Array.from(this.panels.entries());
+        if (panelEntries.length === 0) {
+            return undefined;
+        }
+
+        // Check if any panel is currently visible/active
+        for (const [, panel] of panelEntries) {
+            if (panel.active) {
+                return panel;
+            }
+        }
+
+        // If no active panel found, return the last opened one
+        return panelEntries[panelEntries.length - 1][1];
+    }
 }

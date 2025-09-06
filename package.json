@@ -63,6 +63,12 @@
         "title": "Refresh Notes",
         "category": "Notes",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "notes.quickPasteImage",
+        "title": "Quick Paste Image from Clipboard (F4)",
+        "category": "Notes",
+        "icon": "$(file-media)"
       }
     ],
     "keybindings": [
@@ -85,6 +91,11 @@
         "command": "notes.linkToCode",
         "key": "ctrl+alt+l",
         "mac": "cmd+alt+l"
+      },
+      {
+        "command": "notes.quickPasteImage",
+        "key": "f4",
+        "when": "activeWebviewPanelId =~ /notes\\.editor/ || focusedView == notes.notesView"
       }
     ],
     "viewsContainers": {

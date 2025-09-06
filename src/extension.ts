@@ -121,6 +121,15 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         }),
         
+        vscode.commands.registerCommand('notes.quickPasteImage', async () => {
+            try {
+                await quickPasteImageToActiveNote();
+            } catch (error) {
+                console.error('Failed to quick paste image:', error);
+                vscode.window.showErrorMessage(`Failed to paste image via F4: ${error}`);
+            }
+        }),
+        
         // Search operations
         vscode.commands.registerCommand('notes.searchNotes', async () => {
             try {
@@ -440,6 +449,41 @@ function getWorkspaceRoot(): string | undefined {
     return workspaceFolders && workspaceFolders.length > 0 
         ? workspaceFolders[0].uri.fsPath 
         : undefined;
+}
+
+async function quickPasteImageToActiveNote() {
+    try {
+        // Check if clipboard has image data first
+        const imageBuffer = await imageService.processClipboardImage();
+        if (!imageBuffer) {
+            vscode.window.showInformationMessage('No image found in clipboard');
+            return;
+        }
+
+        if (!await imageService.validateImage(imageBuffer)) {
+            vscode.window.showErrorMessage('Invalid or unsupported image format');
+            return;
+        }
+
+        // Get all active webview panels and find notes editor
+        const activeNotePanel = webviewProvider.getActiveNotePanel();
+        if (!activeNotePanel) {
+            vscode.window.showWarningMessage('F4 hotkey works only when a note editor is active. Open a note first.');
+            return;
+        }
+
+        // Send message to webview to trigger image paste (simulates clicking "Add Image")
+        activeNotePanel.webview.postMessage({
+            command: 'addImage',
+            data: { source: 'f4-hotkey' }
+        });
+
+        console.log('F4 hotkey: Image paste message sent to webview');
+
+    } catch (error) {
+        console.error('Failed to process clipboard image:', error);
+        vscode.window.showErrorMessage(`Failed to process clipboard image: ${error}`);
+    }
 }
 
 async function showWelcomeMessage(context: vscode.ExtensionContext) {

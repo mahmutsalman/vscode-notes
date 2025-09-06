@@ -12,6 +12,9 @@ out/
 # Local resources (personal notes)
 localResources/
 
+# Extension generated user data
+.notes/
+
 # OS generated files
 .DS_Store
 .DS_Store?

@@ -934,6 +934,12 @@
         const message = event.data;
         
         switch (message.command) {
+            case 'addImage':
+                // Handle F4 hotkey image paste trigger
+                console.log('🔥 F4 hotkey triggered - adding image from clipboard');
+                addImage();
+                break;
+                
             case 'saveSuccess':
                 isDirty = false;
                 updateSaveButtonState();
