@@ -357,6 +357,19 @@
             this.currentImage = null;
             this.preloadedImages = new Map();
             
+            // Zoom state management
+            this.zoomLevel = 1.0;
+            this.minZoom = 0.5;
+            this.maxZoom = 5.0;
+            this.zoomStep = 0.1;
+            this.panX = 0;
+            this.panY = 0;
+            this.isDragging = false;
+            this.dragStartX = 0;
+            this.dragStartY = 0;
+            this.dragStartPanX = 0;
+            this.dragStartPanY = 0;
+            
             console.log(`🖼️ Opening image modal: ${this.currentIndex + 1} of ${this.images.length}`);
             
             if (this.images.length === 0) {
@@ -380,11 +393,17 @@
                         <div class="image-modal-counter">
                             <span id="imageCounter">${this.currentIndex + 1} / ${this.images.length}</span>
                         </div>
+                        <div class="image-modal-zoom-controls">
+                            <button class="zoom-btn" id="zoomOut" aria-label="Zoom Out" title="Zoom Out (- or Ctrl+Mouse Wheel)">−</button>
+                            <span class="zoom-indicator" id="zoomIndicator">100%</span>
+                            <button class="zoom-btn" id="zoomIn" aria-label="Zoom In" title="Zoom In (+ or Ctrl+Mouse Wheel)">+</button>
+                            <button class="zoom-btn" id="zoomReset" aria-label="Reset Zoom" title="Reset Zoom (Double-click)">⌂</button>
+                        </div>
                         <button class="image-modal-close" id="closeModal" aria-label="Close">✕</button>
                     </div>
                     <div class="image-modal-body">
                         <button class="image-modal-nav image-modal-prev" id="prevImage" aria-label="Previous image">‹</button>
-                        <div class="image-modal-content">
+                        <div class="image-modal-content" id="imageContainer">
                             <img id="modalImage" class="image-modal-image" alt="Full size image" />
                             <div class="image-modal-loading" id="imageLoading">Loading...</div>
                         </div>
@@ -394,6 +413,7 @@
                         <div class="image-modal-info">
                             <span id="imageFilename"></span>
                             <span id="imageDimensions"></span>
+                            <span class="zoom-hint">Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan</span>
                         </div>
                     </div>
                 </div>
@@ -411,6 +431,11 @@
             document.getElementById('prevImage').addEventListener('click', () => this.navigate(-1));
             document.getElementById('nextImage').addEventListener('click', () => this.navigate(1));
             
+            // Zoom control buttons
+            document.getElementById('zoomIn').addEventListener('click', () => this.zoomIn());
+            document.getElementById('zoomOut').addEventListener('click', () => this.zoomOut());
+            document.getElementById('zoomReset').addEventListener('click', () => this.resetZoom());
+            
             // Click outside to close
             this.modal.addEventListener('click', (e) => {
                 if (e.target === this.modal) {
@@ -418,12 +443,33 @@
                 }
             });
             
-            // Keyboard navigation
+            // Mouse wheel zoom (Cmd/Ctrl + wheel)
+            this.wheelHandler = (e) => this.handleWheel(e);
+            this.modal.addEventListener('wheel', this.wheelHandler, { passive: false });
+            
+            // Mouse drag for panning
+            this.mouseDownHandler = (e) => this.handleMouseDown(e);
+            this.mouseMoveHandler = (e) => this.handleMouseMove(e);
+            this.mouseUpHandler = (e) => this.handleMouseUp(e);
+            
+            this.currentImage.addEventListener('mousedown', this.mouseDownHandler);
+            document.addEventListener('mousemove', this.mouseMoveHandler);
+            document.addEventListener('mouseup', this.mouseUpHandler);
+            
+            // Double-click to toggle zoom
+            this.doubleClickHandler = (e) => this.handleDoubleClick(e);
+            this.currentImage.addEventListener('dblclick', this.doubleClickHandler);
+            
+            // Keyboard navigation and zoom
             this.keyboardHandler = (e) => this.handleKeyboard(e);
             document.addEventListener('keydown', this.keyboardHandler);
             
             // Image load events
-            this.currentImage.onload = () => this.hideLoading();
+            this.currentImage.onload = () => {
+                this.hideLoading();
+                this.updateZoomIndicator();
+                this.updateCursor();
+            };
             this.currentImage.onerror = () => this.handleImageError();
         }
         
@@ -443,7 +489,108 @@
                     event.preventDefault();
                     this.navigate(1);
                     break;
+                case '+':
+                case '=':
+                    event.preventDefault();
+                    this.zoomIn();
+                    break;
+                case '-':
+                case '_':
+                    event.preventDefault();
+                    this.zoomOut();
+                    break;
+                case '0':
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                        this.resetZoom();
+                    }
+                    break;
             }
+        }
+        
+        handleWheel(event) {
+            // Only handle wheel events with Cmd (Mac) or Ctrl (Win/Linux) key pressed
+            if (!event.ctrlKey && !event.metaKey) {
+                return;
+            }
+            
+            event.preventDefault();
+            
+            // Normalize wheel delta across different browsers
+            const delta = event.deltaY || event.detail || event.wheelDelta;
+            const zoomDelta = delta > 0 ? -this.zoomStep : this.zoomStep;
+            
+            this.setZoom(this.zoomLevel + zoomDelta);
+        }
+        
+        handleDoubleClick(event) {
+            event.preventDefault();
+            
+            // Toggle between 100% and 200% zoom
+            if (this.zoomLevel === 1.0) {
+                this.setZoom(2.0);
+            } else {
+                this.resetZoom();
+            }
+        }
+        
+        handleMouseDown(event) {
+            // Only enable dragging when zoomed in
+            if (this.zoomLevel <= 1.0) return;
+            
+            event.preventDefault();
+            this.isDragging = true;
+            this.dragStartX = event.clientX;
+            this.dragStartY = event.clientY;
+            this.dragStartPanX = this.panX;
+            this.dragStartPanY = this.panY;
+            
+            this.updateCursor();
+        }
+        
+        handleMouseMove(event) {
+            if (!this.isDragging || this.zoomLevel <= 1.0) return;
+            
+            event.preventDefault();
+            
+            const deltaX = event.clientX - this.dragStartX;
+            const deltaY = event.clientY - this.dragStartY;
+            
+            this.panX = this.dragStartPanX + deltaX;
+            this.panY = this.dragStartPanY + deltaY;
+            
+            // Apply boundary constraints to prevent panning too far
+            this.constrainPan();
+            
+            this.applyTransform();
+        }
+        
+        handleMouseUp(event) {
+            if (!this.isDragging) return;
+            
+            this.isDragging = false;
+            this.updateCursor();
+        }
+        
+        constrainPan() {
+            if (!this.currentImage) return;
+            
+            // Get image and container dimensions
+            const container = document.getElementById('imageContainer');
+            const containerRect = container.getBoundingClientRect();
+            const imageRect = this.currentImage.getBoundingClientRect();
+            
+            // Calculate the scaled image dimensions
+            const scaledWidth = imageRect.width;
+            const scaledHeight = imageRect.height;
+            
+            // Calculate maximum pan distances to keep image visible
+            const maxPanX = Math.max(0, (scaledWidth - containerRect.width) / 2);
+            const maxPanY = Math.max(0, (scaledHeight - containerRect.height) / 2);
+            
+            // Constrain pan values
+            this.panX = Math.max(-maxPanX, Math.min(maxPanX, this.panX));
+            this.panY = Math.max(-maxPanY, Math.min(maxPanY, this.panY));
         }
         
         navigate(direction) {
@@ -453,6 +600,10 @@
             console.log(`🔄 Navigating: ${this.currentIndex} → ${newIndex}`);
             
             this.currentIndex = newIndex;
+            
+            // Reset zoom and pan when changing images
+            this.resetZoom();
+            
             this.updateDisplay();
             this.preloadAdjacentImages();
         }
@@ -555,12 +706,99 @@
             });
         }
         
+        // Zoom methods
+        zoomIn() {
+            this.setZoom(this.zoomLevel + this.zoomStep);
+        }
+        
+        zoomOut() {
+            this.setZoom(this.zoomLevel - this.zoomStep);
+        }
+        
+        setZoom(newZoom) {
+            // Clamp zoom level between min and max
+            const clampedZoom = Math.max(this.minZoom, Math.min(this.maxZoom, newZoom));
+            
+            if (clampedZoom === this.zoomLevel) return;
+            
+            this.zoomLevel = clampedZoom;
+            this.applyTransform();
+            this.updateZoomIndicator();
+            this.updateCursor();
+            
+            // Reset pan position if zooming out to 100% or less
+            if (this.zoomLevel <= 1.0) {
+                this.panX = 0;
+                this.panY = 0;
+            }
+        }
+        
+        resetZoom() {
+            this.zoomLevel = 1.0;
+            this.panX = 0;
+            this.panY = 0;
+            this.applyTransform();
+            this.updateZoomIndicator();
+            this.updateCursor();
+        }
+        
+        applyTransform() {
+            if (this.currentImage) {
+                const transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoomLevel})`;
+                this.currentImage.style.transform = transform;
+                this.currentImage.style.transformOrigin = 'center center';
+            }
+        }
+        
+        updateZoomIndicator() {
+            const indicator = document.getElementById('zoomIndicator');
+            if (indicator) {
+                indicator.textContent = `${Math.round(this.zoomLevel * 100)}%`;
+            }
+            
+            // Update zoom button states
+            const zoomInBtn = document.getElementById('zoomIn');
+            const zoomOutBtn = document.getElementById('zoomOut');
+            
+            if (zoomInBtn) {
+                zoomInBtn.disabled = this.zoomLevel >= this.maxZoom;
+            }
+            if (zoomOutBtn) {
+                zoomOutBtn.disabled = this.zoomLevel <= this.minZoom;
+            }
+        }
+        
+        updateCursor() {
+            if (this.currentImage) {
+                if (this.zoomLevel > 1.0) {
+                    this.currentImage.style.cursor = this.isDragging ? 'grabbing' : 'grab';
+                } else {
+                    this.currentImage.style.cursor = 'zoom-in';
+                }
+            }
+        }
+        
         close() {
             console.log('🔄 Closing image modal');
             
             // Remove event listeners
             if (this.keyboardHandler) {
                 document.removeEventListener('keydown', this.keyboardHandler);
+            }
+            if (this.wheelHandler) {
+                this.modal.removeEventListener('wheel', this.wheelHandler);
+            }
+            if (this.mouseDownHandler) {
+                this.currentImage.removeEventListener('mousedown', this.mouseDownHandler);
+            }
+            if (this.mouseMoveHandler) {
+                document.removeEventListener('mousemove', this.mouseMoveHandler);
+            }
+            if (this.mouseUpHandler) {
+                document.removeEventListener('mouseup', this.mouseUpHandler);
+            }
+            if (this.doubleClickHandler) {
+                this.currentImage.removeEventListener('dblclick', this.doubleClickHandler);
             }
             
             // Remove modal from DOM
