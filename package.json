@@ -20,7 +20,6 @@
     "onView:notes.notesView"
   ],
   "main": "./dist/extension.js",
-  "icon": "media/icons/activity-bar-icon.svg",
   "contributes": {
     "commands": [
       {
@@ -151,7 +150,8 @@
     "watch": "webpack --mode development --watch",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./dist/test/runTest.js"
+    "test": "node ./dist/test/runTest.js",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",

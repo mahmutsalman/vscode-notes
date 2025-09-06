@@ -211,8 +211,9 @@
         const imagesHtml = `
             <h3>Images (${images.length})</h3>
             <div class="images-grid">
-                ${images.map(img => `
+                ${images.map((img, index) => `
                     <div class="image-item" data-image-id="${img.id}">
+                        <div class="image-counter">${index + 1}/${images.length}</div>
                         <img src="${img.thumbnailPath || img.webviewPath}" alt="${escapeHtml(img.caption || 'Note image')}" class="thumbnail" data-full-image="${img.webviewPath}" />
                         <div class="image-controls">
                             <button class="btn-small btn-danger remove-image" data-image-id="${img.id}">
