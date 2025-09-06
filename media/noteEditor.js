@@ -348,67 +348,249 @@
         }
     }
 
-    function viewFullImage(thumbnail) {
-        // Create full-screen image viewer
-        const overlay = document.createElement('div');
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(0, 0, 0, 0.9);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            cursor: pointer;
-        `;
-        
-        const fullImage = document.createElement('img');
-        
-        // Try to get the full image path from data attribute first
-        let fullImageSrc = thumbnail.dataset.fullImage;
-        
-        // Fallback: try to construct from thumbnail src
-        if (!fullImageSrc) {
-            console.warn('⚠️ No data-full-image attribute found, trying fallback method');
-            fullImageSrc = thumbnail.src.replace('/thumb-', '/image-');
+    // Image Modal Class for navigation between images
+    class ImageModal {
+        constructor(images, startIndex = 0) {
+            this.images = images || [];
+            this.currentIndex = startIndex;
+            this.modal = null;
+            this.currentImage = null;
+            this.preloadedImages = new Map();
             
-            // Additional fallback: try replacing .jpg with .png for clipboard images
-            if (fullImageSrc.includes('/image-') && fullImageSrc.endsWith('.jpg')) {
-                fullImageSrc = fullImageSrc.replace('.jpg', '.png');
+            console.log(`🖼️ Opening image modal: ${this.currentIndex + 1} of ${this.images.length}`);
+            
+            if (this.images.length === 0) {
+                console.warn('⚠️ No images available for modal');
+                return;
+            }
+            
+            this.createModal();
+            this.attachEventListeners();
+            this.preloadAdjacentImages();
+            this.updateDisplay();
+        }
+        
+        createModal() {
+            // Create modal overlay
+            this.modal = document.createElement('div');
+            this.modal.className = 'image-modal-overlay';
+            this.modal.innerHTML = `
+                <div class="image-modal-container">
+                    <div class="image-modal-header">
+                        <div class="image-modal-counter">
+                            <span id="imageCounter">${this.currentIndex + 1} / ${this.images.length}</span>
+                        </div>
+                        <button class="image-modal-close" id="closeModal" aria-label="Close">✕</button>
+                    </div>
+                    <div class="image-modal-body">
+                        <button class="image-modal-nav image-modal-prev" id="prevImage" aria-label="Previous image">‹</button>
+                        <div class="image-modal-content">
+                            <img id="modalImage" class="image-modal-image" alt="Full size image" />
+                            <div class="image-modal-loading" id="imageLoading">Loading...</div>
+                        </div>
+                        <button class="image-modal-nav image-modal-next" id="nextImage" aria-label="Next image">›</button>
+                    </div>
+                    <div class="image-modal-footer">
+                        <div class="image-modal-info">
+                            <span id="imageFilename"></span>
+                            <span id="imageDimensions"></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(this.modal);
+            this.currentImage = document.getElementById('modalImage');
+        }
+        
+        attachEventListeners() {
+            // Close button
+            document.getElementById('closeModal').addEventListener('click', () => this.close());
+            
+            // Navigation buttons
+            document.getElementById('prevImage').addEventListener('click', () => this.navigate(-1));
+            document.getElementById('nextImage').addEventListener('click', () => this.navigate(1));
+            
+            // Click outside to close
+            this.modal.addEventListener('click', (e) => {
+                if (e.target === this.modal) {
+                    this.close();
+                }
+            });
+            
+            // Keyboard navigation
+            this.keyboardHandler = (e) => this.handleKeyboard(e);
+            document.addEventListener('keydown', this.keyboardHandler);
+            
+            // Image load events
+            this.currentImage.onload = () => this.hideLoading();
+            this.currentImage.onerror = () => this.handleImageError();
+        }
+        
+        handleKeyboard(event) {
+            switch (event.key) {
+                case 'Escape':
+                    this.close();
+                    break;
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                    event.preventDefault();
+                    this.navigate(-1);
+                    break;
+                case 'ArrowRight':
+                case 'ArrowDown':
+                case ' ':
+                    event.preventDefault();
+                    this.navigate(1);
+                    break;
             }
         }
         
-        console.log('🖼️ Viewing full image:', fullImageSrc);
-        fullImage.src = fullImageSrc;
+        navigate(direction) {
+            if (this.images.length <= 1) return;
+            
+            const newIndex = (this.currentIndex + direction + this.images.length) % this.images.length;
+            console.log(`🔄 Navigating: ${this.currentIndex} → ${newIndex}`);
+            
+            this.currentIndex = newIndex;
+            this.updateDisplay();
+            this.preloadAdjacentImages();
+        }
         
-        fullImage.style.cssText = `
-            max-width: 90%;
-            max-height: 90%;
-            object-fit: contain;
-        `;
-        
-        // Handle image load errors
-        fullImage.onerror = function() {
-            console.error('❌ Failed to load full image:', fullImageSrc);
-            // Try alternative extensions
-            if (fullImageSrc.endsWith('.png')) {
-                console.log('🔄 Trying .jpg extension instead');
-                fullImage.src = fullImageSrc.replace('.png', '.jpg');
-            } else if (fullImageSrc.endsWith('.jpg')) {
-                console.log('🔄 Trying .png extension instead');
-                fullImage.src = fullImageSrc.replace('.jpg', '.png');
+        updateDisplay() {
+            const image = this.images[this.currentIndex];
+            if (!image) return;
+            
+            // Show loading
+            this.showLoading();
+            
+            // Update counter
+            document.getElementById('imageCounter').textContent = `${this.currentIndex + 1} / ${this.images.length}`;
+            
+            // Update navigation button states
+            const prevBtn = document.getElementById('prevImage');
+            const nextBtn = document.getElementById('nextImage');
+            
+            if (this.images.length === 1) {
+                prevBtn.style.display = 'none';
+                nextBtn.style.display = 'none';
+            } else {
+                prevBtn.style.display = 'flex';
+                nextBtn.style.display = 'flex';
             }
-        };
+            
+            // Set image source
+            this.loadImage(image);
+            
+            // Update filename
+            document.getElementById('imageFilename').textContent = image.filename || 'Unknown file';
+            
+            // Update dimensions if available
+            const dimensionsElement = document.getElementById('imageDimensions');
+            if (image.dimensions) {
+                dimensionsElement.textContent = `${image.dimensions.width} × ${image.dimensions.height}`;
+            } else {
+                dimensionsElement.textContent = '';
+            }
+        }
         
-        overlay.appendChild(fullImage);
-        document.body.appendChild(overlay);
+        loadImage(image) {
+            let imageSrc = image.webviewPath;
+            
+            // Fallback logic
+            if (!imageSrc) {
+                console.warn('⚠️ No webviewPath found, using fallback');
+                imageSrc = image.thumbnailPath?.replace('/thumb-', '/image-');
+                
+                if (imageSrc?.includes('/image-') && imageSrc.endsWith('.jpg')) {
+                    imageSrc = imageSrc.replace('.jpg', '.png');
+                }
+            }
+            
+            console.log('🖼️ Loading image:', imageSrc);
+            this.currentImage.src = imageSrc;
+        }
         
-        overlay.addEventListener('click', () => {
-            document.body.removeChild(overlay);
-        });
+        handleImageError() {
+            console.error('❌ Failed to load image');
+            this.hideLoading();
+            
+            const image = this.images[this.currentIndex];
+            let imageSrc = this.currentImage.src;
+            
+            // Try alternative extensions
+            if (imageSrc.endsWith('.png')) {
+                console.log('🔄 Trying .jpg extension');
+                this.currentImage.src = imageSrc.replace('.png', '.jpg');
+            } else if (imageSrc.endsWith('.jpg')) {
+                console.log('🔄 Trying .png extension');
+                this.currentImage.src = imageSrc.replace('.jpg', '.png');
+            }
+        }
+        
+        showLoading() {
+            document.getElementById('imageLoading').style.display = 'flex';
+        }
+        
+        hideLoading() {
+            document.getElementById('imageLoading').style.display = 'none';
+        }
+        
+        preloadAdjacentImages() {
+            // Preload next and previous images for smooth navigation
+            const indicesToPreload = [
+                (this.currentIndex - 1 + this.images.length) % this.images.length,
+                (this.currentIndex + 1) % this.images.length
+            ];
+            
+            indicesToPreload.forEach(index => {
+                if (index === this.currentIndex || this.preloadedImages.has(index)) return;
+                
+                const image = this.images[index];
+                if (!image || !image.webviewPath) return;
+                
+                const img = new Image();
+                img.src = image.webviewPath;
+                this.preloadedImages.set(index, img);
+            });
+        }
+        
+        close() {
+            console.log('🔄 Closing image modal');
+            
+            // Remove event listeners
+            if (this.keyboardHandler) {
+                document.removeEventListener('keydown', this.keyboardHandler);
+            }
+            
+            // Remove modal from DOM
+            if (this.modal && this.modal.parentNode) {
+                document.body.removeChild(this.modal);
+            }
+            
+            // Clear preloaded images
+            this.preloadedImages.clear();
+        }
+    }
+
+    function viewFullImage(thumbnail) {
+        // Find the clicked image in the current note's images array
+        if (!currentNote || !currentNote.images) {
+            console.warn('⚠️ No current note or images available');
+            return;
+        }
+        
+        // Find the index of the clicked image
+        const imageId = thumbnail.closest('.image-item').dataset.imageId;
+        const imageIndex = currentNote.images.findIndex(img => img.id === imageId);
+        
+        if (imageIndex === -1) {
+            console.warn('⚠️ Could not find clicked image in note data');
+            return;
+        }
+        
+        // Open modal with the clicked image
+        new ImageModal(currentNote.images, imageIndex);
     }
 
     function linkToCode() {
