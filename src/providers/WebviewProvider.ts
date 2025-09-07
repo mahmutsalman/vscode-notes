@@ -98,6 +98,9 @@ export class WebviewProvider {
             case 'searchTags':
                 await this.searchTags(message.data.query, panel);
                 break;
+            case 'updateImageColor':
+                await this.updateImageColor(message.data, noteId, panel);
+                break;
             default:
                 console.warn('Unknown webview message:', message);
         }
@@ -335,6 +338,48 @@ export class WebviewProvider {
         }
     }
 
+    private async updateImageColor(data: any, noteId: string, panel: vscode.WebviewPanel): Promise<void> {
+        console.log('🎨 updateImageColor called in WebviewProvider');
+        console.log('📥 Data received:', data);
+        console.log('📝 Note ID:', noteId);
+        
+        try {
+            const note = await this.storageService.loadNote(noteId);
+            if (!note) {
+                throw new Error('Note not found');
+            }
+
+            console.log('📋 Note loaded, updating color...');
+            const success = note.updateImageColor(data.imageId, data.color);
+            if (!success) {
+                throw new Error('Image not found');
+            }
+
+            console.log('✅ Image color updated in memory, saving...');
+            // Save the note
+            await this.storageService.saveNote(note);
+
+            // Update search index
+            this.searchService.updateIndex(this.storageService.getIndex());
+
+            console.log('💾 Note saved, sending success message to webview');
+            // Send success message to webview
+            panel.webview.postMessage({
+                command: 'imageColorUpdated',
+                data: { imageId: data.imageId, color: data.color }
+            });
+
+            console.log(`✅ Image ${data.imageId} color updated to ${data.color || 'none'}`);
+
+        } catch (error) {
+            console.error('❌ Failed to update image color:', error);
+            panel.webview.postMessage({
+                command: 'imageColorError',
+                data: { error: (error as Error).toString() }
+            });
+        }
+    }
+
     private getWebviewContent(webview: vscode.Webview, note: NoteModel): string {
         // Get URIs for resources
         const styleUri = webview.asWebviewUri(
@@ -442,9 +487,15 @@ export class WebviewProvider {
 
         return `
             <h3>Images (${images.length})</h3>
+            <div class="color-filters">
+                <button class="filter-btn active" data-color="all">All</button>
+                <button class="filter-btn" data-color="green">Green</button>
+                <button class="filter-btn" data-color="blue">Blue</button>
+                <button class="filter-btn" data-color="purple">Purple</button>
+            </div>
             <div class="images-grid">
                 ${images.map((img, index) => `
-                    <div class="image-item" data-image-id="${img.id}">
+                    <div class="image-item ${img.color ? `color-${img.color}` : ''}" data-image-id="${img.id}" data-color="${img.color || ''}">
                         <div class="image-counter">${index + 1}/${images.length}</div>
                         <img src="${img.thumbnailPath}" alt="${this.escapeHtml(img.caption || 'Note image')}" class="thumbnail" data-full-image="${img.webviewPath}" />
                         <div class="image-controls">
@@ -498,20 +549,29 @@ export class WebviewProvider {
     }
 
     public getActiveNotePanel(): vscode.WebviewPanel | undefined {
+        console.log('🔍 getActiveNotePanel called');
         // Find the most recently focused panel (last one in the map is usually the active one)
         const panelEntries = Array.from(this.panels.entries());
+        console.log('📊 Panel entries count:', panelEntries.length);
+        
         if (panelEntries.length === 0) {
+            console.log('❌ No panels found');
             return undefined;
         }
 
         // Check if any panel is currently visible/active
-        for (const [, panel] of panelEntries) {
+        for (const [noteId, panel] of panelEntries) {
+            console.log(`📋 Checking panel for note ${noteId}, active: ${panel.active}, visible: ${panel.visible}`);
             if (panel.active) {
+                console.log(`✅ Found active panel for note ${noteId}`);
                 return panel;
             }
         }
 
         // If no active panel found, return the last opened one
-        return panelEntries[panelEntries.length - 1][1];
+        const lastPanel = panelEntries[panelEntries.length - 1][1];
+        const lastNoteId = panelEntries[panelEntries.length - 1][0];
+        console.log(`⚡ No active panel, using last opened panel for note ${lastNoteId}`);
+        return lastPanel;
     }
 }

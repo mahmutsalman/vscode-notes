@@ -10,6 +10,7 @@ export interface NoteImage {
   };
   created: number;
   caption?: string;
+  color?: 'green' | 'blue' | 'purple';
 }
 
 export interface LinkedFile {
@@ -80,6 +81,24 @@ export class NoteModel implements Note {
       return true;
     }
     return false;
+  }
+
+  public updateImageColor(imageId: string, color?: 'green' | 'blue' | 'purple'): boolean {
+    const image = this.images.find(img => img.id === imageId);
+    if (image) {
+      if (color) {
+        image.color = color;
+      } else {
+        delete image.color;
+      }
+      this.updated = Date.now();
+      return true;
+    }
+    return false;
+  }
+
+  public getLastImage(): NoteImage | undefined {
+    return this.images.length > 0 ? this.images[this.images.length - 1] : undefined;
   }
 
   public addTag(tag: string): void {

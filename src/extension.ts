@@ -129,6 +129,16 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`Failed to paste image via F4: ${error}`);
             }
         }),
+
+        vscode.commands.registerCommand('notes.cycleImageColor', async () => {
+            console.log('🔥 Shift+F12 Command triggered: notes.cycleImageColor');
+            try {
+                await cycleImageColorInActiveNote();
+            } catch (error) {
+                console.error('Failed to cycle image color:', error);
+                vscode.window.showErrorMessage(`Failed to cycle image color via Shift+F12: ${error}`);
+            }
+        }),
         
         // Search operations
         vscode.commands.registerCommand('notes.searchNotes', async () => {
@@ -483,6 +493,34 @@ async function quickPasteImageToActiveNote() {
     } catch (error) {
         console.error('Failed to process clipboard image:', error);
         vscode.window.showErrorMessage(`Failed to process clipboard image: ${error}`);
+    }
+}
+
+async function cycleImageColorInActiveNote() {
+    console.log('🎨 cycleImageColorInActiveNote function called');
+    try {
+        // Get all active webview panels and find notes editor
+        console.log('🔍 Looking for active note panel...');
+        const activeNotePanel = webviewProvider.getActiveNotePanel();
+        
+        if (!activeNotePanel) {
+            console.log('❌ No active note panel found');
+            vscode.window.showWarningMessage('Shift+F12 hotkey works only when a note editor is active. Open a note first.');
+            return;
+        }
+
+        console.log('✅ Active note panel found, sending message to webview');
+        // Send message to webview to trigger color cycling
+        activeNotePanel.webview.postMessage({
+            command: 'cycleImageColor',
+            data: { source: 'f12-hotkey' }
+        });
+
+        console.log('📤 Shift+F12 hotkey: Color cycling message sent to webview');
+
+    } catch (error) {
+        console.error('❌ Failed to cycle image color:', error);
+        vscode.window.showErrorMessage(`Failed to cycle image color: ${error}`);
     }
 }
 

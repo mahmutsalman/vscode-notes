@@ -69,6 +69,12 @@
         "title": "Quick Paste Image from Clipboard (F4)",
         "category": "Notes",
         "icon": "$(file-media)"
+      },
+      {
+        "command": "notes.cycleImageColor",
+        "title": "Cycle Image Color (Shift+F12)",
+        "category": "Notes",
+        "icon": "$(symbol-color)"
       }
     ],
     "keybindings": [
@@ -95,6 +101,11 @@
       {
         "command": "notes.quickPasteImage",
         "key": "f4",
+        "when": "activeWebviewPanelId =~ /notes\\.editor/ || focusedView == notes.notesView"
+      },
+      {
+        "command": "notes.cycleImageColor",
+        "key": "shift+f12",
         "when": "activeWebviewPanelId =~ /notes\\.editor/ || focusedView == notes.notesView"
       }
     ],

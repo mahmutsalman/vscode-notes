@@ -5,6 +5,7 @@
     let currentNote = null;
     let isDirty = false;
     let autoSaveTimeout = null;
+    let currentColorFilter = 'all';
 
     // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
@@ -210,9 +211,15 @@
         
         const imagesHtml = `
             <h3>Images (${images.length})</h3>
+            <div class="color-filters">
+                <button class="filter-btn active" data-color="all">All</button>
+                <button class="filter-btn" data-color="green">Green</button>
+                <button class="filter-btn" data-color="blue">Blue</button>
+                <button class="filter-btn" data-color="purple">Purple</button>
+            </div>
             <div class="images-grid">
                 ${images.map((img, index) => `
-                    <div class="image-item" data-image-id="${img.id}">
+                    <div class="image-item ${img.color ? `color-${img.color}` : ''}" data-image-id="${img.id}" data-color="${img.color || ''}">
                         <div class="image-counter">${index + 1}/${images.length}</div>
                         <img src="${img.thumbnailPath || img.webviewPath}" alt="${escapeHtml(img.caption || 'Note image')}" class="thumbnail" data-full-image="${img.webviewPath}" />
                         <div class="image-controls">
@@ -227,6 +234,12 @@
         `;
         
         gallery.innerHTML = imagesHtml;
+        
+        // Set up color filters
+        setupColorFilters();
+        
+        // Apply current filter
+        applyColorFilter(currentColorFilter);
     }
 
     function loadLinkedFiles(linkedFiles) {
@@ -940,6 +953,12 @@
                 addImage();
                 break;
                 
+            case 'cycleImageColor':
+                // Handle Shift+F12 hotkey color cycling trigger
+                console.log('🎨 Shift+F12 hotkey message received in webview');
+                cycleLastImageColor();
+                break;
+                
             case 'saveSuccess':
                 isDirty = false;
                 updateSaveButtonState();
@@ -974,6 +993,16 @@
                 
             case 'tagSuggestions':
                 showTagSuggestions(message.data.suggestions);
+                break;
+                
+            case 'imageColorUpdated':
+                // Handle successful image color update
+                console.log('🎨 Image color updated:', message.data);
+                updateImageColorDisplay(message.data.imageId, message.data.color);
+                break;
+                
+            case 'imageColorError':
+                showNotification('Failed to update image color: ' + message.data.error, 'error');
                 break;
         }
     }
@@ -1089,6 +1118,106 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // Color cycling functions
+    function cycleLastImageColor() {
+        console.log('🔄 cycleLastImageColor function called');
+        console.log('📋 Current note:', currentNote);
+        
+        if (!currentNote || !currentNote.images || currentNote.images.length === 0) {
+            console.warn('❌ No images to cycle color for');
+            console.log('📊 Images length:', currentNote?.images?.length || 0);
+            return;
+        }
+
+        const lastImage = currentNote.images[currentNote.images.length - 1];
+        console.log('🖼️ Last image:', lastImage);
+        
+        const colorCycle = [undefined, 'green', 'blue', 'purple'];
+        const currentColorIndex = colorCycle.indexOf(lastImage.color);
+        const nextColor = colorCycle[(currentColorIndex + 1) % colorCycle.length];
+
+        console.log(`🎨 Cycling color from ${lastImage.color || 'none'} to ${nextColor || 'none'}`);
+        console.log(`📍 Color index: ${currentColorIndex} → ${(currentColorIndex + 1) % colorCycle.length}`);
+
+        // Send update to extension
+        if (window.vscode) {
+            console.log('📤 Sending updateImageColor message to extension');
+            window.vscode.postMessage({
+                command: 'updateImageColor',
+                data: {
+                    imageId: lastImage.id,
+                    color: nextColor
+                }
+            });
+        } else {
+            console.error('❌ window.vscode not available');
+        }
+    }
+
+    function updateImageColorDisplay(imageId, color) {
+        const imageItem = document.querySelector(`[data-image-id="${imageId}"]`);
+        if (!imageItem) {
+            console.warn('Image item not found:', imageId);
+            return;
+        }
+
+        // Remove existing color classes
+        imageItem.classList.remove('color-green', 'color-blue', 'color-purple');
+        
+        // Add new color class if color is set
+        if (color) {
+            imageItem.classList.add(`color-${color}`);
+        }
+        
+        // Update data attribute
+        imageItem.setAttribute('data-color', color || '');
+
+        // Update current note data
+        if (currentNote && currentNote.images) {
+            const image = currentNote.images.find(img => img.id === imageId);
+            if (image) {
+                if (color) {
+                    image.color = color;
+                } else {
+                    delete image.color;
+                }
+            }
+        }
+
+        // Apply current filter
+        applyColorFilter(currentColorFilter);
+    }
+
+    function setupColorFilters() {
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        filterButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const color = this.getAttribute('data-color');
+                setActiveFilter(color);
+                applyColorFilter(color);
+            });
+        });
+    }
+
+    function setActiveFilter(color) {
+        currentColorFilter = color;
+        
+        // Update button states
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-color') === color);
+        });
+    }
+
+    function applyColorFilter(color) {
+        const imageItems = document.querySelectorAll('.image-item');
+        
+        imageItems.forEach(item => {
+            const imageColor = item.getAttribute('data-color');
+            const shouldShow = color === 'all' || imageColor === color;
+            item.style.display = shouldShow ? 'block' : 'none';
+        });
     }
 
     // Export functions for testing

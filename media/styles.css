@@ -288,6 +288,73 @@ body {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
+/* Color frame styles */
+.image-item.color-green {
+    border: 3px solid #28a745;
+    border-radius: var(--border-radius);
+    transition: border-color 0.3s ease;
+}
+
+.image-item.color-blue {
+    border: 3px solid #007acc;
+    border-radius: var(--border-radius);
+    transition: border-color 0.3s ease;
+}
+
+.image-item.color-purple {
+    border: 3px solid #7b68ee;
+    border-radius: var(--border-radius);
+    transition: border-color 0.3s ease;
+}
+
+/* Color filter buttons */
+.color-filters {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-sm);
+    padding: var(--spacing-xs) 0;
+}
+
+.filter-btn {
+    padding: 6px 12px;
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: 1px solid var(--vscode-button-border);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.filter-btn:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.filter-btn.active {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-color: var(--vscode-focusBorder);
+}
+
+.filter-btn[data-color="green"].active {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+.filter-btn[data-color="blue"].active {
+    background: #007acc;
+    color: white;
+    border-color: #007acc;
+}
+
+.filter-btn[data-color="purple"].active {
+    background: #7b68ee;
+    color: white;
+    border-color: #7b68ee;
+}
+
 .image-caption {
     padding: var(--spacing-sm);
     font-size: 12px;
