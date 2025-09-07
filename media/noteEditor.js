@@ -142,8 +142,13 @@
         
         // Image operations
         document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('remove-image')) {
-                removeImage(e.target.dataset.imageId);
+            // Check if clicked element or its parent is the remove button
+            const removeButton = e.target.classList.contains('remove-image') ? 
+                e.target : 
+                e.target.closest('.remove-image');
+                
+            if (removeButton) {
+                removeImage(removeButton.dataset.imageId);
             } else if (e.target.classList.contains('thumbnail')) {
                 viewFullImage(e.target);
             }
@@ -352,13 +357,15 @@
     }
 
     function removeImage(imageId) {
-        if (confirm('Remove this image from the note?')) {
-            if (window.vscode) {
-                window.vscode.postMessage({
-                    command: 'removeImage',
-                    data: { imageId }
-                });
-            }
+        console.log('🗑️ Remove image requested for ID:', imageId);
+        if (window.vscode) {
+            window.vscode.postMessage({
+                command: 'removeImage',
+                data: { imageId }
+            });
+            console.log('📤 Remove image message sent to extension');
+        } else {
+            console.error('❌ window.vscode not available for image removal');
         }
     }
 
