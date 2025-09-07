@@ -420,6 +420,12 @@
                             <button class="zoom-btn" id="zoomIn" aria-label="Zoom In" title="Zoom In (+ or Ctrl+Mouse Wheel)">+</button>
                             <button class="zoom-btn" id="zoomReset" aria-label="Reset Zoom" title="Reset Zoom (Double-click)">⌂</button>
                         </div>
+                        <div class="image-modal-color-controls">
+                            <button class="color-btn" data-color="green" title="Assign Green (Press 1)">●</button>
+                            <button class="color-btn" data-color="blue" title="Assign Blue (Press 2)">●</button>
+                            <button class="color-btn" data-color="purple" title="Assign Purple (Press 3)">●</button>
+                            <button class="color-btn clear-color" data-color="" title="Clear Color (Press 0)">○</button>
+                        </div>
                         <button class="image-modal-close" id="closeModal" aria-label="Close">✕</button>
                     </div>
                     <div class="image-modal-body">
@@ -456,6 +462,14 @@
             document.getElementById('zoomIn').addEventListener('click', () => this.zoomIn());
             document.getElementById('zoomOut').addEventListener('click', () => this.zoomOut());
             document.getElementById('zoomReset').addEventListener('click', () => this.resetZoom());
+            
+            // Color button click handlers
+            document.querySelectorAll('.color-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const color = btn.dataset.color;
+                    this.assignColorToCurrentImage(color);
+                });
+            });
             
             // Click outside to close
             this.modal.addEventListener('click', (e) => {
@@ -524,7 +538,22 @@
                     if (event.ctrlKey || event.metaKey) {
                         event.preventDefault();
                         this.resetZoom();
+                    } else {
+                        event.preventDefault();
+                        this.assignColorToCurrentImage(''); // Clear color
                     }
+                    break;
+                case '1':
+                    event.preventDefault();
+                    this.assignColorToCurrentImage('green');
+                    break;
+                case '2':
+                    event.preventDefault();
+                    this.assignColorToCurrentImage('blue');
+                    break;
+                case '3':
+                    event.preventDefault();
+                    this.assignColorToCurrentImage('purple');
                     break;
             }
         }
@@ -653,6 +682,9 @@
             
             // Apply color frame to modal image
             this.applyColorFrame(image.color);
+            
+            // Update color button states to show current color
+            this.updateColorButtonStates(image.color);
             
             // Set image source
             this.loadImage(image);
@@ -808,13 +840,21 @@
         applyColorFrame(color) {
             if (!this.currentImage) return;
             
-            // Remove existing color classes
+            const modalContainer = document.querySelector('.image-modal-container');
+            
+            // Remove existing color classes from both image and modal container
             this.currentImage.classList.remove('color-green', 'color-blue', 'color-purple');
+            if (modalContainer) {
+                modalContainer.classList.remove('modal-color-green', 'modal-color-blue', 'modal-color-purple');
+            }
             
             // Add new color class if color is set
             if (color) {
                 this.currentImage.classList.add(`color-${color}`);
-                console.log(`🎨 Applied ${color} frame to modal image`);
+                if (modalContainer) {
+                    modalContainer.classList.add(`modal-color-${color}`);
+                }
+                console.log(`🎨 Applied ${color} frame to modal image and container`);
             }
         }
         
@@ -886,6 +926,63 @@
                 const hintElement = document.querySelector('.zoom-hint');
                 if (hintElement) {
                     hintElement.textContent = 'Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan';
+                }
+            }
+        }
+        
+        assignColorToCurrentImage(color) {
+            const image = this.images[this.currentIndex];
+            if (!image) {
+                console.warn('❌ No current image to assign color to');
+                return;
+            }
+            
+            console.log(`🎨 Assigning color ${color || 'none'} to image ${image.id}`);
+            
+            // Update local image data
+            if (color) {
+                image.color = color;
+            } else {
+                delete image.color;
+            }
+            
+            // Apply visual frame immediately
+            this.applyColorFrame(color);
+            
+            // Send update to backend
+            if (window.vscode) {
+                window.vscode.postMessage({
+                    command: 'updateImageColor',
+                    data: {
+                        imageId: image.id,
+                        color: color
+                    }
+                });
+                console.log(`📤 Sent color update to backend: ${image.id} -> ${color || 'none'}`);
+            }
+            
+            // Update button states
+            this.updateColorButtonStates(color);
+        }
+        
+        updateColorButtonStates(activeColor) {
+            // Remove active class from all buttons
+            const colorBtns = document.querySelectorAll('.color-btn');
+            colorBtns.forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Add active class to current color button
+            if (activeColor) {
+                const activeBtn = document.querySelector(`.color-btn[data-color="${activeColor}"]`);
+                if (activeBtn) {
+                    activeBtn.classList.add('active');
+                }
+            } else {
+                // If no color, highlight the clear button
+                const clearBtn = document.querySelector('.color-btn.clear-color');
+                if (clearBtn) {
+                    clearBtn.classList.add('active');
                 }
             }
         }
