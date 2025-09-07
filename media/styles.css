@@ -610,6 +610,45 @@ body {
     cursor: zoom-in;
 }
 
+/* Modal Color Frames */
+.image-modal-image.color-green {
+    border: 4px solid #28a745;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px #28a745;
+}
+
+.image-modal-image.color-blue {
+    border: 4px solid #007acc;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px #007acc;
+}
+
+.image-modal-image.color-purple {
+    border: 4px solid #7b68ee;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px #7b68ee;
+}
+
+/* Scrollable mode for tall images */
+.image-modal-body.scrollable-mode {
+    overflow-y: auto;
+    overflow-x: hidden;
+    align-items: flex-start;
+    scroll-behavior: smooth;
+    padding: var(--spacing-md) 0;
+}
+
+.image-modal-content.scrollable-mode {
+    align-items: flex-start;
+    min-height: 100%;
+    height: auto;
+}
+
+.image-modal-image.tall-image {
+    max-height: none;
+    width: 90%;
+    max-width: 90%;
+    height: auto;
+    cursor: default;
+}
+
 .image-modal-content {
     overflow: hidden;
     position: relative;

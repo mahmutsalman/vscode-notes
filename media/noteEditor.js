@@ -651,6 +651,9 @@
                 nextBtn.style.display = 'flex';
             }
             
+            // Apply color frame to modal image
+            this.applyColorFrame(image.color);
+            
             // Set image source
             this.loadImage(image);
             
@@ -661,6 +664,9 @@
             const dimensionsElement = document.getElementById('imageDimensions');
             if (image.dimensions) {
                 dimensionsElement.textContent = `${image.dimensions.width} × ${image.dimensions.height}`;
+                
+                // Calculate optimal zoom for tall images
+                this.calculateOptimalZoom(image.dimensions);
             } else {
                 dimensionsElement.textContent = '';
             }
@@ -795,6 +801,91 @@
                     this.currentImage.style.cursor = this.isDragging ? 'grabbing' : 'grab';
                 } else {
                     this.currentImage.style.cursor = 'zoom-in';
+                }
+            }
+        }
+        
+        applyColorFrame(color) {
+            if (!this.currentImage) return;
+            
+            // Remove existing color classes
+            this.currentImage.classList.remove('color-green', 'color-blue', 'color-purple');
+            
+            // Add new color class if color is set
+            if (color) {
+                this.currentImage.classList.add(`color-${color}`);
+                console.log(`🎨 Applied ${color} frame to modal image`);
+            }
+        }
+        
+        calculateOptimalZoom(dimensions) {
+            if (!dimensions || !this.currentImage) return;
+            
+            const { width: imgWidth, height: imgHeight } = dimensions;
+            const aspectRatio = imgHeight / imgWidth;
+            
+            // Get viewport dimensions (modal content area)
+            const modal = document.getElementById('imageContainer');
+            if (!modal) return;
+            
+            const modalRect = modal.getBoundingClientRect();
+            const viewportWidth = modalRect.width * 0.9; // 90% of container width
+            const viewportHeight = modalRect.height * 0.9; // 90% of container height
+            
+            // Determine if image is tall (height > 1.5x width or height fills more than viewport)
+            const isTallImage = aspectRatio > 1.5 || imgHeight > viewportHeight;
+            
+            if (isTallImage) {
+                // For tall images: calculate zoom to fit width optimally
+                const optimalZoom = Math.min(viewportWidth / imgWidth, 1.5); // Max 150% zoom
+                
+                // Enable scroll mode for tall images
+                this.enableScrollMode();
+                
+                // Set optimal zoom after image loads
+                setTimeout(() => {
+                    this.setZoom(optimalZoom);
+                    console.log(`📏 Applied optimal zoom ${Math.round(optimalZoom * 100)}% for tall image`);
+                }, 100);
+                
+            } else {
+                // For normal images: use standard behavior
+                this.disableScrollMode();
+            }
+        }
+        
+        enableScrollMode() {
+            const modalBody = document.querySelector('.image-modal-body');
+            const modalContent = document.getElementById('imageContainer');
+            
+            if (modalBody && modalContent) {
+                modalBody.classList.add('scrollable-mode');
+                modalContent.classList.add('scrollable-mode');
+                this.currentImage.classList.add('tall-image');
+                
+                // Update hint text
+                const hintElement = document.querySelector('.zoom-hint');
+                if (hintElement) {
+                    hintElement.textContent = 'Tip: Scroll to navigate tall image, Cmd/Ctrl + Mouse Wheel to zoom';
+                }
+                
+                console.log('📜 Enabled scroll mode for tall image');
+            }
+        }
+        
+        disableScrollMode() {
+            const modalBody = document.querySelector('.image-modal-body');
+            const modalContent = document.getElementById('imageContainer');
+            
+            if (modalBody && modalContent) {
+                modalBody.classList.remove('scrollable-mode');
+                modalContent.classList.remove('scrollable-mode');
+                this.currentImage.classList.remove('tall-image');
+                
+                // Restore original hint text
+                const hintElement = document.querySelector('.zoom-hint');
+                if (hintElement) {
+                    hintElement.textContent = 'Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan';
                 }
             }
         }
