@@ -4,6 +4,7 @@
   "description": "Visual note-taking extension for VS Code with screenshot support",
   "version": "1.0.0",
   "publisher": "notes-extension",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -100,8 +101,7 @@
       },
       {
         "command": "notes.quickPasteImage",
-        "key": "f4",
-        "when": "activeWebviewPanelId =~ /notes\\.editor/ || focusedView == notes.notesView"
+        "key": "f4"
       },
       {
         "command": "notes.cycleImageColor",
