@@ -3,7 +3,7 @@
   "displayName": "Notes",
   "description": "Visual note-taking extension for VS Code with screenshot support",
   "version": "1.0.0",
-  "publisher": "notes-extension",
+  "publisher": "mahmutsalman",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.74.0"
