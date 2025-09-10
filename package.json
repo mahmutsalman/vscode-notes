@@ -76,6 +76,12 @@
         "title": "Cycle Image Color (Shift+F12)",
         "category": "Notes",
         "icon": "$(symbol-color)"
+      },
+      {
+        "command": "notes.openNoteInNewPanel",
+        "title": "Open Note in New Panel (Test Split)",
+        "category": "Notes",
+        "icon": "$(split-horizontal)"
       }
     ],
     "keybindings": [
@@ -156,6 +162,12 @@
           "command": "notes.deleteNote",
           "when": "view == notes.notesView && viewItem == note",
           "group": "inline"
+        },
+        {
+          "command": "notes.openNoteInNewPanel",
+          "when": "view == notes.notesView && viewItem == note",
+          "group": "navigation",
+          "title": "Open in New Panel"
         }
       ],
       "editor/context": [

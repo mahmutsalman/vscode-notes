@@ -19,6 +19,8 @@
             loadNoteData(window.noteData);
         } else {
             console.warn('⚠️ No note data available');
+            
+            // Note: Removed state restoration - using simpler approach where each panel gets fresh data
         }
     });
 
@@ -154,6 +156,18 @@
             }
         });
         
+        // Image right-click context menu
+        document.addEventListener('contextmenu', function(e) {
+            if (e.target.classList.contains('thumbnail')) {
+                e.preventDefault(); // Prevent default context menu
+                
+                const imageItem = e.target.closest('.image-item');
+                const imageId = imageItem.dataset.imageId;
+                
+                showImageContextMenu(e, imageId);
+            }
+        });
+        
         // Keyboard shortcuts
         document.addEventListener('keydown', handleKeyboardShortcuts);
         
@@ -178,6 +192,8 @@
 
     function loadNoteData(data) {
         currentNote = data;
+        
+        // Note: Removed state management - using simpler file-like approach for split editor
         
         // Populate form fields
         document.getElementById('noteTitle').value = data.title || '';
@@ -215,7 +231,12 @@
         }
         
         const imagesHtml = `
-            <h3>Images (${images.length})</h3>
+            <div class="images-header">
+                <h3>Images (${images.length})</h3>
+                <button class="btn-small btn-gallery" id="openGalleryBtn" title="Open image gallery in right editor">
+                    📸 Gallery
+                </button>
+            </div>
             <div class="color-filters">
                 <button class="filter-btn active" data-color="all">All</button>
                 <button class="filter-btn" data-color="green">Green</button>
@@ -242,6 +263,9 @@
         
         // Set up color filters
         setupColorFilters();
+        
+        // Set up gallery button
+        setupGalleryButton();
         
         // Apply current filter
         applyColorFilter(currentColorFilter);
@@ -502,8 +526,19 @@
             // Image load events
             this.currentImage.onload = () => {
                 this.hideLoading();
+                
+                // Always set to 100% zoom and center positioning
+                this.zoomLevel = 1.0;
+                this.panX = 0;
+                this.panY = 0;
+                this.setImagePosition('center');
+                this.disableScrollMode();
+                
+                this.applyTransform();
                 this.updateZoomIndicator();
                 this.updateCursor();
+                
+                console.log('📏 Image loaded at 100% zoom');
             };
             this.currentImage.onerror = () => this.handleImageError();
         }
@@ -696,9 +731,6 @@
             const dimensionsElement = document.getElementById('imageDimensions');
             if (image.dimensions) {
                 dimensionsElement.textContent = `${image.dimensions.width} × ${image.dimensions.height}`;
-                
-                // Calculate optimal zoom for tall images
-                this.calculateOptimalZoom(image.dimensions);
             } else {
                 dimensionsElement.textContent = '';
             }
@@ -796,6 +828,10 @@
             this.zoomLevel = 1.0;
             this.panX = 0;
             this.panY = 0;
+            
+            // Reset to center positioning when zoom is reset
+            this.setImagePosition('center');
+            
             this.applyTransform();
             this.updateZoomIndicator();
             this.updateCursor();
@@ -805,7 +841,30 @@
             if (this.currentImage) {
                 const transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoomLevel})`;
                 this.currentImage.style.transform = transform;
-                this.currentImage.style.transformOrigin = 'center center';
+                
+                // Use the positioning set by setImagePosition
+                // Default to center center if no positioning was set
+                if (!this.currentImage.style.transformOrigin) {
+                    this.currentImage.style.transformOrigin = 'center center';
+                }
+            }
+        }
+        
+        setImagePosition(position) {
+            if (!this.currentImage) return;
+            
+            switch (position) {
+                case 'top':
+                    this.currentImage.style.transformOrigin = 'center top';
+                    break;
+                case 'center':
+                    this.currentImage.style.transformOrigin = 'center center';
+                    break;
+                case 'bottom':
+                    this.currentImage.style.transformOrigin = 'center bottom';
+                    break;
+                default:
+                    this.currentImage.style.transformOrigin = 'center center';
             }
         }
         
@@ -858,41 +917,6 @@
             }
         }
         
-        calculateOptimalZoom(dimensions) {
-            if (!dimensions || !this.currentImage) return;
-            
-            const { width: imgWidth, height: imgHeight } = dimensions;
-            const aspectRatio = imgHeight / imgWidth;
-            
-            // Get viewport dimensions (modal content area)
-            const modal = document.getElementById('imageContainer');
-            if (!modal) return;
-            
-            const modalRect = modal.getBoundingClientRect();
-            const viewportWidth = modalRect.width * 0.9; // 90% of container width
-            const viewportHeight = modalRect.height * 0.9; // 90% of container height
-            
-            // Determine if image is tall (height > 1.5x width or height fills more than viewport)
-            const isTallImage = aspectRatio > 1.5 || imgHeight > viewportHeight;
-            
-            if (isTallImage) {
-                // For tall images: calculate zoom to fit width optimally
-                const optimalZoom = Math.min(viewportWidth / imgWidth, 1.5); // Max 150% zoom
-                
-                // Enable scroll mode for tall images
-                this.enableScrollMode();
-                
-                // Set optimal zoom after image loads
-                setTimeout(() => {
-                    this.setZoom(optimalZoom);
-                    console.log(`📏 Applied optimal zoom ${Math.round(optimalZoom * 100)}% for tall image`);
-                }, 100);
-                
-            } else {
-                // For normal images: use standard behavior
-                this.disableScrollMode();
-            }
-        }
         
         enableScrollMode() {
             const modalBody = document.querySelector('.image-modal-body');
@@ -920,13 +944,17 @@
             if (modalBody && modalContent) {
                 modalBody.classList.remove('scrollable-mode');
                 modalContent.classList.remove('scrollable-mode');
-                this.currentImage.classList.remove('tall-image');
+                if (this.currentImage) {
+                    this.currentImage.classList.remove('tall-image');
+                }
                 
-                // Restore original hint text
+                // Reset hint text
                 const hintElement = document.querySelector('.zoom-hint');
                 if (hintElement) {
-                    hintElement.textContent = 'Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan';
+                    hintElement.textContent = 'Tip: Use mouse wheel with Cmd/Ctrl to zoom, drag to pan when zoomed';
                 }
+                
+                console.log('📜 Disabled scroll mode');
             }
         }
         
@@ -1038,6 +1066,103 @@
         
         // Open modal with the clicked image
         new ImageModal(currentNote.images, imageIndex);
+    }
+
+    function showImageContextMenu(event, imageId) {
+        // Remove any existing context menu
+        const existingMenu = document.querySelector('.image-context-menu');
+        if (existingMenu) {
+            existingMenu.remove();
+        }
+
+        // Create context menu
+        const menu = document.createElement('div');
+        menu.className = 'image-context-menu';
+        menu.style.position = 'absolute';
+        menu.style.left = event.pageX + 'px';
+        menu.style.top = event.pageY + 'px';
+        menu.style.backgroundColor = 'var(--vscode-menu-background)';
+        menu.style.border = '1px solid var(--vscode-menu-border)';
+        menu.style.borderRadius = '3px';
+        menu.style.boxShadow = '0 2px 8px var(--vscode-widget-shadow)';
+        menu.style.zIndex = '1000';
+        menu.style.minWidth = '180px';
+        menu.style.padding = '4px 0';
+
+        // Menu items
+        const menuItems = [
+            {
+                text: '🖼️ Open in Right Editor',
+                action: () => openImageInRightEditor(imageId)
+            },
+            {
+                text: '📸 Open Gallery in Right Editor',
+                action: () => openImageGalleryInRightEditor()
+            },
+            {
+                text: '🔍 View Full Size',
+                action: () => {
+                    const thumbnail = document.querySelector(`[data-image-id="${imageId}"] .thumbnail`);
+                    if (thumbnail) {
+                        viewFullImage(thumbnail);
+                    }
+                }
+            }
+        ];
+
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('div');
+            menuItem.className = 'context-menu-item';
+            menuItem.textContent = item.text;
+            menuItem.style.padding = '6px 12px';
+            menuItem.style.cursor = 'pointer';
+            menuItem.style.color = 'var(--vscode-menu-foreground)';
+            
+            menuItem.addEventListener('mouseenter', () => {
+                menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
+            });
+            
+            menuItem.addEventListener('mouseleave', () => {
+                menuItem.style.backgroundColor = 'transparent';
+            });
+            
+            menuItem.addEventListener('click', () => {
+                item.action();
+                menu.remove();
+            });
+            
+            menu.appendChild(menuItem);
+        });
+
+        document.body.appendChild(menu);
+
+        // Close menu when clicking elsewhere
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu() {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+            });
+        }, 0);
+    }
+
+    function openImageInRightEditor(imageId) {
+        console.log('📤 Sending openImageInRightEditor message for image:', imageId);
+        if (window.vscode) {
+            window.vscode.postMessage({
+                command: 'openImageInRightEditor',
+                data: { imageId: imageId }
+            });
+        }
+    }
+
+    function openImageGalleryInRightEditor() {
+        console.log('📤 Sending openImageGalleryInRightEditor message');
+        if (window.vscode) {
+            window.vscode.postMessage({
+                command: 'openImageGalleryInRightEditor',
+                data: {}
+            });
+        }
     }
 
     function linkToCode() {
@@ -1199,6 +1324,7 @@
             case 'imageColorError':
                 showNotification('Failed to update image color: ' + message.data.error, 'error');
                 break;
+                
         }
     }
 
@@ -1394,6 +1520,16 @@
                 applyColorFilter(color);
             });
         });
+    }
+
+    function setupGalleryButton() {
+        const galleryBtn = document.getElementById('openGalleryBtn');
+        if (galleryBtn) {
+            galleryBtn.addEventListener('click', function() {
+                console.log('🖼️ Gallery button clicked');
+                openImageGalleryInRightEditor();
+            });
+        }
     }
 
     function setActiveFilter(color) {

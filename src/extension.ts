@@ -70,13 +70,15 @@ function registerProviders(context: vscode.ExtensionContext) {
     notesProvider = new NotesProvider(storageService, searchService, context);
     vscode.window.registerTreeDataProvider('notes.notesView', notesProvider);
     
-    // Create and register the webview provider
+    // Create webview provider
     webviewProvider = new WebviewProvider(
         context,
         storageService,
         imageService,
         searchService
     );
+    
+    // Note: Removed WebviewPanelSerializer - using simpler file-like approach for split editor
     
     console.log('Providers registered successfully');
 }

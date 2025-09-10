@@ -925,3 +925,64 @@ body {
         left: 2px;
     }
 }
+
+/* Image Context Menu Styles */
+.image-context-menu {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    background-color: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 3px;
+    box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+    overflow: hidden;
+}
+
+.context-menu-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    color: var(--vscode-menu-foreground);
+    transition: background-color 0.1s ease;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.context-menu-item:hover {
+    background-color: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+/* Images Header with Gallery Button */
+.images-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.images-header h3 {
+    margin: 0;
+    color: var(--vscode-foreground);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.btn-gallery {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: 1px solid var(--vscode-button-border);
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    white-space: nowrap;
+}
+
+.btn-gallery:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+
+.btn-gallery:active {
+    background: var(--vscode-button-background);
+    transform: translateY(1px);
+}

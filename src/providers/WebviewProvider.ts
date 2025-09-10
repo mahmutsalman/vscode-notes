@@ -7,7 +7,8 @@ import { NoteModel } from '../models/Note';
 
 export class WebviewProvider {
     private static readonly viewType = 'notes.editor';
-    private panels: Map<string, vscode.WebviewPanel> = new Map();
+    private panels: Map<string, { panel: vscode.WebviewPanel, noteId: string }> = new Map();
+    private panelIdCounter = 0;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -16,6 +17,7 @@ export class WebviewProvider {
         private searchService: SearchService
     ) {
         this.registerCommands();
+        // Note: Serializer registration moved to extension.ts for proper timing
     }
 
     private registerCommands() {
@@ -24,17 +26,16 @@ export class WebviewProvider {
             await this.openNote(noteId);
         });
 
-        this.context.subscriptions.push(openNoteCommand);
+        // Register command to force open note in new panel (for testing split functionality)
+        const openNoteNewPanelCommand = vscode.commands.registerCommand('notes.openNoteInNewPanel', async (noteId: string) => {
+            console.log(`🔬 Force opening note ${noteId} in new panel for testing`);
+            await this.openNote(noteId);
+        });
+
+        this.context.subscriptions.push(openNoteCommand, openNoteNewPanelCommand);
     }
 
     public async openNote(noteId: string): Promise<void> {
-        // Check if panel already exists for this note
-        const existingPanel = this.panels.get(noteId);
-        if (existingPanel) {
-            existingPanel.reveal();
-            return;
-        }
-
         // Load the note
         const note = await this.storageService.loadNote(noteId);
         if (!note) {
@@ -42,11 +43,17 @@ export class WebviewProvider {
             return;
         }
 
-        // Create new webview panel
+        // Create unique panel ID
+        const panelId = `panel-${++this.panelIdCounter}`;
+
+        // Create new webview panel - behave like built-in file editors
         const panel = vscode.window.createWebviewPanel(
             WebviewProvider.viewType,
             `Edit: ${note.title}`,
-            vscode.ViewColumn.One,
+            {
+                viewColumn: vscode.ViewColumn.Active,
+                preserveFocus: false
+            },
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
@@ -71,11 +78,13 @@ export class WebviewProvider {
 
         // Clean up when panel is disposed
         panel.onDidDispose(() => {
-            this.panels.delete(noteId);
+            console.log(`🗑️ Webview panel disposed: ${panelId} for note: ${noteId}`);
+            this.panels.delete(panelId);
         });
 
-        // Store panel reference
-        this.panels.set(noteId, panel);
+        // Store panel reference with metadata
+        this.panels.set(panelId, { panel: panel, noteId: noteId });
+        console.log(`✅ Created panel ${panelId} for note: ${noteId}`);
     }
 
     private async handleWebviewMessage(message: any, noteId: string, panel: vscode.WebviewPanel): Promise<void> {
@@ -100,6 +109,12 @@ export class WebviewProvider {
                 break;
             case 'updateImageColor':
                 await this.updateImageColor(message.data, noteId, panel);
+                break;
+            case 'openImageInRightEditor':
+                await this.openImageInRightEditor(message.data, noteId);
+                break;
+            case 'openImageGalleryInRightEditor':
+                await this.openImageGalleryInRightEditor(noteId);
                 break;
             default:
                 console.warn('Unknown webview message:', message);
@@ -380,6 +395,153 @@ export class WebviewProvider {
         }
     }
 
+    private async openImageInRightEditor(data: any, noteId: string): Promise<void> {
+        console.log('🖼️ openImageInRightEditor called');
+        console.log('📥 Data received:', data);
+        console.log('📝 Note ID:', noteId);
+        
+        try {
+            const note = await this.storageService.loadNote(noteId);
+            if (!note) {
+                throw new Error('Note not found');
+            }
+
+            // Find the image by ID
+            const image = note.images.find(img => img.id === data.imageId);
+            if (!image) {
+                throw new Error('Image not found');
+            }
+
+            // Get the actual file path (not webview URI)
+            const imagePath = this.storageService.getImagePath(noteId, image.filename);
+            const imageUri = vscode.Uri.file(imagePath);
+
+            console.log('🖼️ Opening image in right editor:', imagePath);
+            
+            // Open the image in VS Code's built-in image viewer in the right column
+            await vscode.commands.executeCommand('vscode.open', imageUri, {
+                viewColumn: vscode.ViewColumn.Beside, // Opens in right editor
+                preserveFocus: false
+            });
+
+            console.log('✅ Image opened successfully in right editor');
+
+        } catch (error) {
+            console.error('❌ Failed to open image in right editor:', error);
+            vscode.window.showErrorMessage(`Failed to open image: ${error}`);
+        }
+    }
+
+    private async openImageGalleryInRightEditor(noteId: string): Promise<void> {
+        console.log('🖼️ openImageGalleryInRightEditor called');
+        console.log('📝 Note ID:', noteId);
+        
+        try {
+            const note = await this.storageService.loadNote(noteId);
+            if (!note) {
+                throw new Error('Note not found');
+            }
+
+            if (note.images.length === 0) {
+                vscode.window.showInformationMessage('No images in this note to display');
+                return;
+            }
+
+            // Create unique panel ID for gallery
+            const panelId = `gallery-${Date.now()}`;
+
+            console.log('🖼️ Creating image gallery panel in right editor');
+            
+            // Create new webview panel for image gallery
+            const galleryPanel = vscode.window.createWebviewPanel(
+                'notes.imageGallery',
+                `Gallery: ${note.title}`,
+                {
+                    viewColumn: vscode.ViewColumn.Beside, // Opens in right editor
+                    preserveFocus: false
+                },
+                {
+                    enableScripts: true,
+                    retainContextWhenHidden: true,
+                    localResourceRoots: [
+                        vscode.Uri.file(path.join(this.context.extensionPath, 'media')),
+                        vscode.Uri.file(path.join(this.getWorkspaceRoot() || '', '.notes'))
+                    ]
+                }
+            );
+
+            // Set the gallery webview content
+            galleryPanel.webview.html = this.getImageGalleryContent(galleryPanel.webview, note);
+
+            // Handle messages from gallery webview
+            galleryPanel.webview.onDidReceiveMessage(
+                async (message) => {
+                    await this.handleGalleryWebviewMessage(message, noteId, galleryPanel);
+                },
+                undefined,
+                this.context.subscriptions
+            );
+
+            // Clean up when panel is disposed
+            galleryPanel.onDidDispose(() => {
+                console.log(`🗑️ Gallery webview panel disposed: ${panelId} for note: ${noteId}`);
+            });
+
+            console.log('✅ Image gallery opened successfully in right editor');
+
+        } catch (error) {
+            console.error('❌ Failed to open image gallery in right editor:', error);
+            vscode.window.showErrorMessage(`Failed to open image gallery: ${error}`);
+        }
+    }
+
+    private async handleGalleryWebviewMessage(message: any, noteId: string, panel: vscode.WebviewPanel): Promise<void> {
+        switch (message.command) {
+            case 'updateImageColor':
+                // Handle color updates for gallery
+                await this.updateImageColorInGallery(message.data, noteId, panel);
+                break;
+            default:
+                console.warn('Unknown gallery webview message:', message);
+        }
+    }
+
+    private async updateImageColorInGallery(data: any, noteId: string, panel: vscode.WebviewPanel): Promise<void> {
+        try {
+            const note = await this.storageService.loadNote(noteId);
+            if (!note) {
+                throw new Error('Note not found');
+            }
+
+            console.log('🎨 Updating image color in gallery:', data);
+            const success = note.updateImageColor(data.imageId, data.color);
+            if (!success) {
+                throw new Error('Image not found');
+            }
+
+            // Save the note
+            await this.storageService.saveNote(note);
+
+            // Update search index
+            this.searchService.updateIndex(this.storageService.getIndex());
+
+            // Send success message to gallery webview
+            panel.webview.postMessage({
+                command: 'imageColorUpdated',
+                data: { imageId: data.imageId, color: data.color }
+            });
+
+            console.log(`✅ Image ${data.imageId} color updated to ${data.color || 'none'} in gallery`);
+
+        } catch (error) {
+            console.error('❌ Failed to update image color in gallery:', error);
+            panel.webview.postMessage({
+                command: 'imageColorError',
+                data: { error: (error as Error).toString() }
+            });
+        }
+    }
+
     private getWebviewContent(webview: vscode.Webview, note: NoteModel): string {
         // Get URIs for resources
         const styleUri = webview.asWebviewUri(
@@ -541,6 +703,96 @@ export class WebviewProvider {
             .replace(/'/g, '&#39;');
     }
 
+    private getImageGalleryContent(webview: vscode.Webview, note: NoteModel): string {
+        // Get URIs for resources
+        const styleUri = webview.asWebviewUri(
+            vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'styles.css'))
+        );
+        const galleryScriptUri = webview.asWebviewUri(
+            vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'imageGalleryViewer.js'))
+        );
+        const iconUri = webview.asWebviewUri(
+            vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'icons'))
+        );
+
+        // Convert image data for webview
+        const imagesForWebview = note.images.map(img => ({
+            ...img,
+            webviewPath: webview.asWebviewUri(
+                vscode.Uri.file(this.storageService.getImagePath(note.id, img.filename))
+            ).toString(),
+            thumbnailPath: webview.asWebviewUri(
+                vscode.Uri.file(this.storageService.getImagePath(note.id, path.basename(img.thumbnail)))
+            ).toString()
+        }));
+
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Image Gallery - ${this.escapeHtml(note.title)}</title>
+            <link href="${styleUri}" rel="stylesheet">
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    overflow: hidden;
+                    background-color: var(--vscode-editor-background);
+                }
+                .gallery-container {
+                    height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .gallery-header {
+                    padding: 10px;
+                    background-color: var(--vscode-sideBar-background);
+                    border-bottom: 1px solid var(--vscode-sideBar-border);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .gallery-title {
+                    color: var(--vscode-foreground);
+                    font-weight: bold;
+                    font-size: 14px;
+                }
+                .gallery-counter {
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 12px;
+                }
+                .gallery-content {
+                    flex: 1;
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="gallery-container">
+                <div class="gallery-header">
+                    <div class="gallery-title">📸 ${this.escapeHtml(note.title)}</div>
+                    <div class="gallery-counter">${note.images.length} image${note.images.length !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="gallery-content" id="galleryContent">
+                    <!-- Gallery will be initialized here -->
+                </div>
+            </div>
+            
+            <script>
+                window.vscode = acquireVsCodeApi();
+                window.iconUri = '${iconUri}';
+                window.images = ${JSON.stringify(imagesForWebview)};
+                console.log('🖼️ Gallery initialized with', window.images.length, 'images');
+            </script>
+            <script src="${galleryScriptUri}"></script>
+        </body>
+        </html>`;
+    }
+
     private getWorkspaceRoot(): string | undefined {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         return workspaceFolders && workspaceFolders.length > 0 
@@ -560,18 +812,20 @@ export class WebviewProvider {
         }
 
         // Check if any panel is currently visible/active
-        for (const [noteId, panel] of panelEntries) {
-            console.log(`📋 Checking panel for note ${noteId}, active: ${panel.active}, visible: ${panel.visible}`);
+        for (const [panelId, panelData] of panelEntries) {
+            const panel = panelData.panel;
+            console.log(`📋 Checking panel ${panelId} for note ${panelData.noteId}, active: ${panel.active}, visible: ${panel.visible}`);
             if (panel.active) {
-                console.log(`✅ Found active panel for note ${noteId}`);
+                console.log(`✅ Found active panel ${panelId} for note ${panelData.noteId}`);
                 return panel;
             }
         }
 
         // If no active panel found, return the last opened one
-        const lastPanel = panelEntries[panelEntries.length - 1][1];
-        const lastNoteId = panelEntries[panelEntries.length - 1][0];
-        console.log(`⚡ No active panel, using last opened panel for note ${lastNoteId}`);
-        return lastPanel;
+        const lastPanelData = panelEntries[panelEntries.length - 1][1];
+        const lastPanelId = panelEntries[panelEntries.length - 1][0];
+        console.log(`⚡ No active panel, using last opened panel ${lastPanelId} for note ${lastPanelData.noteId}`);
+        return lastPanelData.panel;
     }
+
 }
