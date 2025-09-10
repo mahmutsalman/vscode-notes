@@ -499,20 +499,50 @@ async function quickPasteImageToActiveNote() {
 }
 
 async function cycleImageColorInActiveNote() {
-    console.log('🎨 cycleImageColorInActiveNote function called');
+    console.log('🎨 Global Shift+F12 cycleImageColorInActiveNote function called');
     try {
         // Get all active webview panels and find notes editor
         console.log('🔍 Looking for active note panel...');
         const activeNotePanel = webviewProvider.getActiveNotePanel();
         
         if (!activeNotePanel) {
-            console.log('❌ No active note panel found');
-            vscode.window.showWarningMessage('Shift+F12 hotkey works only when a note editor is active. Open a note first.');
+            console.log('❌ No active note panel found - attempting global functionality');
+            
+            // Global functionality: Try to find most recently opened/edited note
+            const allNotes = await storageService.getAllNotes();
+            if (allNotes.length === 0) {
+                vscode.window.showWarningMessage('No notes found. Create a note with images first.', 'Create Note').then(selection => {
+                    if (selection === 'Create Note') {
+                        vscode.commands.executeCommand('notes.newNote');
+                    }
+                });
+                return;
+            }
+
+            // Sort by most recently updated
+            const recentNotes = allNotes.sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+            
+            // Find the most recent note that has images
+            const noteWithImages = recentNotes.find(note => note.images && note.images.length > 0);
+            
+            if (!noteWithImages) {
+                vscode.window.showInformationMessage('No notes with images found for color cycling.', 'Open Note', 'Create Note').then(selection => {
+                    if (selection === 'Open Note') {
+                        vscode.commands.executeCommand('notes.editNote');
+                    } else if (selection === 'Create Note') {
+                        vscode.commands.executeCommand('notes.newNote');
+                    }
+                });
+                return;
+            }
+
+            // Apply color cycling logic directly to the most recent image
+            await performGlobalColorCycling(noteWithImages);
             return;
         }
 
         console.log('✅ Active note panel found, sending message to webview');
-        // Send message to webview to trigger color cycling
+        // Send message to webview to trigger color cycling (existing behavior)
         activeNotePanel.webview.postMessage({
             command: 'cycleImageColor',
             data: { source: 'f12-hotkey' }
@@ -524,6 +554,53 @@ async function cycleImageColorInActiveNote() {
         console.error('❌ Failed to cycle image color:', error);
         vscode.window.showErrorMessage(`Failed to cycle image color: ${error}`);
     }
+}
+
+async function performGlobalColorCycling(note: NoteModel): Promise<void> {
+    console.log('🌍 Performing global color cycling for note:', note.title);
+    
+    if (!note.images || note.images.length === 0) {
+        vscode.window.showWarningMessage('No images found in the most recent note.');
+        return;
+    }
+
+    // Get the last image (most recent)
+    const lastImage = note.images[note.images.length - 1];
+    const colorCycle: (undefined | 'green' | 'blue' | 'purple')[] = [undefined, 'green', 'blue', 'purple'];
+    const colorNames = ['None', 'Green', 'Blue', 'Purple'];
+    
+    const currentColorIndex = colorCycle.indexOf(lastImage.color);
+    const nextColorIndex = (currentColorIndex + 1) % colorCycle.length;
+    const nextColor = colorCycle[nextColorIndex];
+    const nextColorName = colorNames[nextColorIndex];
+
+    console.log(`🎨 Global cycling: ${lastImage.color || 'none'} → ${nextColor || 'none'}`);
+
+    // Update the image color in the note
+    const success = note.updateImageColor(lastImage.id, nextColor);
+    if (!success) {
+        vscode.window.showErrorMessage('Failed to update image color - image not found.');
+        return;
+    }
+
+    // Save the updated note
+    await storageService.saveNote(note);
+    
+    // Update search index
+    searchService.updateIndex(storageService.getIndex());
+    
+    // Refresh tree view
+    notesProvider.refresh();
+
+    // Show notification with color name
+    const cycleCounts = ['1st', '2nd', '3rd'];
+    const cycleText = nextColorIndex < cycleCounts.length ? `${cycleCounts[nextColorIndex]} cycle: ` : '';
+    
+    vscode.window.showInformationMessage(
+        `🎨 ${cycleText}${nextColorName} color assigned to image in "${note.title}"`
+    );
+    
+    console.log(`✅ Global color cycling completed: ${nextColorName} assigned to image in "${note.title}"`);
 }
 
 async function showWelcomeMessage(context: vscode.ExtensionContext) {

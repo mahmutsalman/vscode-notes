@@ -381,8 +381,27 @@ export class WebviewProvider {
             // Send success message to webview
             panel.webview.postMessage({
                 command: 'imageColorUpdated',
-                data: { imageId: data.imageId, color: data.color }
+                data: { 
+                    imageId: data.imageId, 
+                    color: data.color,
+                    cycleInfo: data.cycleInfo || null
+                }
             });
+
+            // Show VS Code notification (like F4 does)
+            const colorNames = { undefined: 'None', green: 'Green', blue: 'Blue', purple: 'Purple' };
+            const colorName = colorNames[data.color as keyof typeof colorNames] || 'None';
+            
+            let notificationText = `${colorName} color assigned`;
+            if (data.cycleInfo && data.cycleInfo.cycleIndex !== undefined) {
+                const cycleCounts = ['1st', '2nd', '3rd'];
+                const cycleIndex = data.cycleInfo.cycleIndex;
+                if (cycleIndex < cycleCounts.length) {
+                    notificationText = `${cycleCounts[cycleIndex]} cycle: ${colorName} color assigned`;
+                }
+            }
+            
+            vscode.window.showInformationMessage(`🎨 ${notificationText}`);
 
             console.log(`✅ Image ${data.imageId} color updated to ${data.color || 'none'}`);
 

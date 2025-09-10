@@ -111,8 +111,7 @@
       },
       {
         "command": "notes.cycleImageColor",
-        "key": "shift+f12",
-        "when": "activeWebviewPanelId =~ /notes\\.editor/ || focusedView == notes.notesView"
+        "key": "shift+f12"
       }
     ],
     "viewsContainers": {

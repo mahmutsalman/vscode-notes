@@ -1319,6 +1319,27 @@
                 // Handle successful image color update
                 console.log('🎨 Image color updated:', message.data);
                 updateImageColorDisplay(message.data.imageId, message.data.color);
+                
+                // Show notification with color name and cycle info
+                const colorNames = {
+                    undefined: 'None',
+                    green: 'Green', 
+                    blue: 'Blue',
+                    purple: 'Purple'
+                };
+                const colorName = colorNames[message.data.color] || 'None';
+                
+                // Add cycle information if available
+                let notificationText = `🎨 ${colorName} color assigned`;
+                if (message.data.cycleInfo && message.data.cycleInfo.cycleIndex !== undefined) {
+                    const cycleCounts = ['1st', '2nd', '3rd'];
+                    const cycleIndex = message.data.cycleInfo.cycleIndex;
+                    if (cycleIndex < cycleCounts.length) {
+                        notificationText = `🎨 ${cycleCounts[cycleIndex]} cycle: ${colorName} color assigned`;
+                    }
+                }
+                
+                showNotification(notificationText, 'success');
                 break;
                 
             case 'imageColorError':
@@ -1469,7 +1490,11 @@
                 command: 'updateImageColor',
                 data: {
                     imageId: lastImage.id,
-                    color: nextColor
+                    color: nextColor,
+                    cycleInfo: {
+                        cycleIndex: (currentColorIndex + 1) % colorCycle.length,
+                        colorName: ['None', 'Green', 'Blue', 'Purple'][(currentColorIndex + 1) % colorCycle.length]
+                    }
                 }
             });
         } else {
