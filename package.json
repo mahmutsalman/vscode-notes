@@ -66,6 +66,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "notes.sortAllNotes",
+        "title": "Change Sort Order",
+        "category": "Notes",
+        "icon": "$(list-selection)"
+      },
+      {
         "command": "notes.quickPasteImage",
         "title": "Quick Paste Image from Clipboard (F4)",
         "category": "Notes",
@@ -149,6 +155,11 @@
           "command": "notes.refreshNotes",
           "when": "view == notes.notesView",
           "group": "navigation"
+        },
+        {
+          "command": "notes.sortAllNotes",
+          "when": "view == notes.notesView",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

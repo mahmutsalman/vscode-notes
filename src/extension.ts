@@ -6,6 +6,7 @@ import { StorageService } from './services/StorageService';
 import { ImageService } from './services/ImageService';
 import { SearchService } from './services/SearchService';
 import { NoteModel } from './models/Note';
+import { NoteSortOrder } from './models/NoteIndex';
 
 let storageService: StorageService;
 let imageService: ImageService;
@@ -171,7 +172,47 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`Failed to refresh notes: ${error}`);
             }
         }),
-        
+
+        vscode.commands.registerCommand('notes.sortAllNotes', async (order?: NoteSortOrder) => {
+            try {
+                let targetOrder = order;
+
+                if (!targetOrder) {
+                    const currentOrder = notesProvider.getAllNotesSortOrder();
+                    const picks: Array<vscode.QuickPickItem & { order: NoteSortOrder }> = [
+                        {
+                            label: 'Last updated (newest first)',
+                            description: currentOrder === 'updated' ? 'Current' : undefined,
+                            picked: currentOrder === 'updated',
+                            order: 'updated'
+                        },
+                        {
+                            label: 'Creation date (newest first)',
+                            description: currentOrder === 'created' ? 'Current' : undefined,
+                            picked: currentOrder === 'created',
+                            order: 'created'
+                        }
+                    ];
+
+                    const selection = await vscode.window.showQuickPick(picks, {
+                        placeHolder: 'Choose how to sort notes',
+                        title: 'Sort Notes'
+                    });
+
+                    if (!selection) {
+                        return;
+                    }
+
+                    targetOrder = selection.order;
+                }
+
+                notesProvider.setAllNotesSortOrder(targetOrder);
+            } catch (error) {
+                console.error('Failed to update notes sort order:', error);
+                vscode.window.showErrorMessage(`Failed to update sort order: ${error}`);
+            }
+        }),
+
         // Internal commands
         vscode.commands.registerCommand('notes.openNote', async (noteId: string) => {
             try {

@@ -2,20 +2,38 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { StorageService } from '../services/StorageService';
 import { SearchService } from '../services/SearchService';
-import { NoteIndexEntry } from '../models/NoteIndex';
+import { NoteIndexEntry, NoteSortOrder } from '../models/NoteIndex';
 
 export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+    private readonly sortStateKey = 'notes.allNotesSortOrder';
+    private allNotesSortOrder: NoteSortOrder;
 
     constructor(
         private storageService: StorageService,
         private searchService: SearchService,
         private context: vscode.ExtensionContext
-    ) {}
+    ) {
+        this.allNotesSortOrder = context.globalState.get<NoteSortOrder>(this.sortStateKey) ?? 'updated';
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
+    }
+
+    setAllNotesSortOrder(order: NoteSortOrder): void {
+        if (this.allNotesSortOrder === order) {
+            return;
+        }
+
+        this.allNotesSortOrder = order;
+        void this.context.globalState.update(this.sortStateKey, order);
+        this.refresh();
+    }
+
+    getAllNotesSortOrder(): NoteSortOrder {
+        return this.allNotesSortOrder;
     }
 
     getTreeItem(element: TreeItem): vscode.TreeItem {
@@ -128,9 +146,9 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     private async getAllNotes(): Promise<TreeItem[]> {
-        const recentNotes = this.searchService.getRecentNotes(20);
-        
-        if (recentNotes.length === 0) {
+        const noteResults = this.searchService.getNotesSortedBy(this.allNotesSortOrder, 50);
+
+        if (noteResults.length === 0) {
             return [new TreeItem(
                 'No notes found',
                 vscode.TreeItemCollapsibleState.None,
@@ -140,7 +158,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
             )];
         }
 
-        return recentNotes.map(result => this.createNoteItem(result.note));
+        return noteResults.map(result => this.createNoteItem(result.note));
     }
 
     private async getSearchResults(): Promise<TreeItem[]> {
@@ -157,10 +175,8 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private createNoteItem(note: NoteIndexEntry): TreeItem {
         const icon = this.getIconForNoteType(note.type, note.isPinned);
-        const timeAgo = this.getTimeAgo(note.updated);
-        
         const title = note.title || 'Untitled Note';
-        const description = note.tags.length > 0 ? note.tags.join(', ') : '';
+        const description = this.buildNoteDescription(note);
         const tooltip = this.createNoteTooltip(note);
         
         const item = new TreeItem(
@@ -170,7 +186,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
             icon,
             description
         );
-        
+
         item.tooltip = tooltip;
         
         // Set command to open note when clicked
@@ -181,6 +197,56 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         };
 
         return item;
+    }
+
+    private buildNoteDescription(note: NoteIndexEntry): string {
+        const parts: string[] = [this.formatCreationSummary(note.created)];
+
+        if (note.tags.length > 0) {
+            parts.push(note.tags.join(', '));
+        }
+
+        return parts.join(' • ');
+    }
+
+    private formatCreationSummary(timestamp: number): string {
+        const created = new Date(timestamp);
+        const now = new Date();
+        const sameDay = created.toDateString() === now.toDateString();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const timeString = created.toLocaleTimeString(undefined, {
+            hour: 'numeric',
+            minute: '2-digit'
+        });
+
+        if (sameDay) {
+            return `Created Today ${timeString}`;
+        }
+
+        if (created.toDateString() === yesterday.toDateString()) {
+            return `Created Yesterday ${timeString}`;
+        }
+
+        const diffDays = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 7) {
+            const weekday = created.toLocaleDateString(undefined, { weekday: 'short' });
+            return `Created ${weekday} ${timeString}`;
+        }
+
+        return `Created ${this.formatCalendarDate(created)}`;
+    }
+
+    private formatCalendarDate(date: Date): string {
+        const now = new Date();
+        const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+
+        if (date.getFullYear() !== now.getFullYear()) {
+            options.year = 'numeric';
+        }
+
+        return date.toLocaleDateString(undefined, options);
     }
 
     private getIconForNoteType(type: 'text' | 'image' | 'hybrid', isPinned?: boolean): string {
@@ -224,27 +290,6 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return lines.join('\n');
     }
 
-    private getTimeAgo(timestamp: number): string {
-        const now = Date.now();
-        const diff = now - timestamp;
-        
-        const minutes = Math.floor(diff / (1000 * 60));
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        
-        if (minutes < 1) {
-            return 'just now';
-        } else if (minutes < 60) {
-            return `${minutes}m ago`;
-        } else if (hours < 24) {
-            return `${hours}h ago`;
-        } else if (days < 7) {
-            return `${days}d ago`;
-        } else {
-            const weeks = Math.floor(days / 7);
-            return `${weeks}w ago`;
-        }
-    }
 }
 
 class TreeItem extends vscode.TreeItem {

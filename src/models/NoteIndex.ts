@@ -26,6 +26,8 @@ export interface IndexData {
   tags: { [key: string]: number }; // tag -> count
 }
 
+export type NoteSortOrder = 'created' | 'updated';
+
 export class NoteIndex {
   private data: IndexData;
   private readonly version = '1.0.0';
@@ -90,9 +92,18 @@ export class NoteIndex {
   }
 
   public getRecentNotes(limit: number = 10): NoteIndexEntry[] {
-    return [...this.data.entries]
-      .sort((a, b) => b.updated - a.updated)
-      .slice(0, limit);
+    return this.getNotesSortedBy('updated', limit);
+  }
+
+  public getNotesSortedBy(order: NoteSortOrder, limit?: number): NoteIndexEntry[] {
+    const sorted = [...this.data.entries].sort((a, b) => {
+      if (order === 'created') {
+        return b.created - a.created;
+      }
+      return b.updated - a.updated;
+    });
+
+    return typeof limit === 'number' ? sorted.slice(0, limit) : sorted;
   }
 
   public getNotesByTag(tag: string): NoteIndexEntry[] {

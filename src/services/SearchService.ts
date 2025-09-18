@@ -1,6 +1,6 @@
 import Fuse from 'fuse.js';
 import { Note } from '../models/Note';
-import { NoteIndex, NoteIndexEntry } from '../models/NoteIndex';
+import { NoteIndex, NoteIndexEntry, NoteSortOrder } from '../models/NoteIndex';
 
 export interface SearchOptions {
   includeContent?: boolean;
@@ -81,7 +81,11 @@ export class SearchService {
   }
 
   public getRecentNotes(limit: number = 10): SearchResult[] {
-    const notes = this.index.getRecentNotes(limit);
+    return this.getNotesSortedBy('updated', limit);
+  }
+
+  public getNotesSortedBy(sortOrder: NoteSortOrder, limit: number = 20): SearchResult[] {
+    const notes = this.index.getNotesSortedBy(sortOrder, limit);
     return notes.map(note => ({
       note,
       score: 1.0,
@@ -242,7 +246,7 @@ export class SearchService {
   }
 
   private getAllNotesAsResults(limit?: number): SearchResult[] {
-    const notes = this.index.getRecentNotes(limit || 50);
+    const notes = this.index.getNotesSortedBy('updated', limit || 50);
     return notes.map(note => ({
       note,
       score: 1.0,
