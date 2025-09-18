@@ -519,6 +519,10 @@
             this.doubleClickHandler = (e) => this.handleDoubleClick(e);
             this.currentImage.addEventListener('dblclick', this.doubleClickHandler);
             
+            // Right-click context menu
+            this.contextMenuHandler = (e) => this.handleContextMenu(e);
+            this.currentImage.addEventListener('contextmenu', this.contextMenuHandler);
+            
             // Keyboard navigation and zoom
             this.keyboardHandler = (e) => this.handleKeyboard(e);
             document.addEventListener('keydown', this.keyboardHandler);
@@ -617,6 +621,21 @@
             } else {
                 this.resetZoom();
             }
+        }
+        
+        handleContextMenu(event) {
+            event.preventDefault(); // Prevent default context menu
+            
+            if (this.images.length === 0) return;
+            
+            // Get the current image ID
+            const currentImage = this.images[this.currentIndex];
+            const imageId = currentImage.id;
+            
+            console.log('🖼️ Right-click on modal image:', imageId);
+            
+            // Show the same context menu as thumbnails
+            showImageContextMenu(event, imageId);
         }
         
         handleMouseDown(event) {
@@ -1037,6 +1056,9 @@
             if (this.doubleClickHandler) {
                 this.currentImage.removeEventListener('dblclick', this.doubleClickHandler);
             }
+            if (this.contextMenuHandler) {
+                this.currentImage.removeEventListener('contextmenu', this.contextMenuHandler);
+            }
             
             // Remove modal from DOM
             if (this.modal && this.modal.parentNode) {
@@ -1085,7 +1107,8 @@
         menu.style.border = '1px solid var(--vscode-menu-border)';
         menu.style.borderRadius = '3px';
         menu.style.boxShadow = '0 2px 8px var(--vscode-widget-shadow)';
-        menu.style.zIndex = '1000';
+        // Use higher z-index if we're in a modal context (modal has z-index: 10000)
+        menu.style.zIndex = document.querySelector('.image-modal-overlay') ? '10001' : '1000';
         menu.style.minWidth = '180px';
         menu.style.padding = '4px 0';
 
