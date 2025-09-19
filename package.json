@@ -65,6 +65,12 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "notes.sortTags",
+        "title": "Sort Tags",
+        "category": "Notes",
+        "icon": "$(sort-precedence)"
+      },
+      {
         "command": "notes.linkToCode",
         "title": "Link to Current Code",
         "category": "Notes",
@@ -185,14 +191,19 @@
           "group": "navigation@3"
         },
         {
-          "command": "notes.filterTags",
+          "command": "notes.sortTags",
           "when": "view == notes.notesView",
           "group": "navigation@4"
         },
         {
+          "command": "notes.filterTags",
+          "when": "view == notes.notesView",
+          "group": "navigation@5"
+        },
+        {
           "command": "notes.clearTagSearch",
           "when": "view == notes.notesView && notes.tagSearchActive",
-          "group": "navigation@5"
+          "group": "navigation@6"
         }
       ],
       "view/item/context": [

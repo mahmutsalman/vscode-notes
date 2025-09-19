@@ -6,7 +6,7 @@ import { StorageService } from './services/StorageService';
 import { ImageService } from './services/ImageService';
 import { SearchService } from './services/SearchService';
 import { NoteModel } from './models/Note';
-import { NoteSortOrder } from './models/NoteIndex';
+import { NoteSortOrder, TagSortOrder } from './models/NoteIndex';
 
 let storageService: StorageService;
 let imageService: ImageService;
@@ -211,6 +211,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('notes.sortAllNotes', async (order?: NoteSortOrder) => {
             try {
+                console.log('[notes] Command notes.sortAllNotes invoked', { order });
                 let targetOrder = order;
 
                 if (!targetOrder) {
@@ -236,16 +237,28 @@ function registerCommands(context: vscode.ExtensionContext) {
                     });
 
                     if (!selection) {
+                        console.log('[notes] notes.sortAllNotes cancelled by user');
                         return;
                     }
 
                     targetOrder = selection.order;
+                    console.log('[notes] notes.sortAllNotes selection', { selectedOrder: targetOrder });
                 }
 
                 notesProvider.setAllNotesSortOrder(targetOrder);
+                console.log('[notes] notes.sortAllNotes applied', { appliedOrder: targetOrder });
             } catch (error) {
                 console.error('Failed to update notes sort order:', error);
                 vscode.window.showErrorMessage(`Failed to update sort order: ${error}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('notes.sortTags', async () => {
+            try {
+                await sortTags();
+            } catch (error) {
+                console.error('Failed to sort tags:', error);
+                vscode.window.showErrorMessage(`Failed to sort tags: ${error}`);
             }
         }),
 
@@ -503,6 +516,42 @@ async function filterTags() {
     }
 
     notesProvider.setTagSearchText(trimmed);
+}
+
+async function sortTags() {
+    const currentOrder = notesProvider.getTagSortOrder();
+    const picks: Array<vscode.QuickPickItem & { order: TagSortOrder }> = [
+        {
+            label: 'Most used',
+            description: currentOrder === 'usage' ? 'Current' : undefined,
+            order: 'usage'
+        },
+        {
+            label: 'Oldest first',
+            description: currentOrder === 'created' ? 'Current' : undefined,
+            detail: 'Tags sorted by the earliest time they were used',
+            order: 'created'
+        },
+        {
+            label: 'Last used',
+            description: currentOrder === 'recent' ? 'Current' : undefined,
+            detail: 'Tags sorted by most recent usage',
+            order: 'recent'
+        }
+    ];
+
+    const selection = await vscode.window.showQuickPick(picks, {
+        placeHolder: 'Choose how to sort tags',
+        title: 'Sort Tags'
+    });
+
+    if (!selection) {
+        console.log('[notes] notes.sortTags cancelled by user');
+        return;
+    }
+
+    notesProvider.setTagSortOrder(selection.order);
+    console.log('[notes] notes.sortTags applied', { appliedOrder: selection.order });
 }
 
 async function linkToCode() {

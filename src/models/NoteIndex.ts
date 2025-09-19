@@ -18,15 +18,22 @@ export interface NoteIndexEntry {
   isPinned?: boolean;
 }
 
+export interface TagStats {
+  count: number;
+  firstUsed: number;
+  lastUsed: number;
+}
+
 export interface IndexData {
   version: string;
   created: number;
   updated: number;
   entries: NoteIndexEntry[];
-  tags: { [key: string]: number }; // tag -> count
+  tags: { [key: string]: TagStats };
 }
 
 export type NoteSortOrder = 'created' | 'updated';
+export type TagSortOrder = 'usage' | 'created' | 'recent';
 
 export class NoteIndex {
   private data: IndexData;
@@ -40,6 +47,9 @@ export class NoteIndex {
       entries: [],
       tags: {}
     };
+
+    // Rebuild tag metadata to ensure we have recency information
+    this.updateTagCounts();
   }
 
   public addNote(note: Note, filePath: string): void {
@@ -167,10 +177,12 @@ export class NoteIndex {
       .map(result => result.entry);
   }
 
-  public getAllTags(): { tag: string; count: number }[] {
-    return Object.entries(this.data.tags)
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count);
+  public getAllTags(sortOrder: TagSortOrder = 'usage'): Array<{ tag: string; count: number; firstUsed: number; lastUsed: number }> {
+    const tagEntries = Object.entries(this.data.tags)
+      .map(([tag, stats]) => ({ tag, ...stats }));
+
+    const sorter = this.getTagSorter(sortOrder);
+    return tagEntries.sort(sorter);
   }
 
   public getTagSuggestions(partial: string): string[] {
@@ -179,22 +191,26 @@ export class NoteIndex {
     }
 
     const searchTerm = partial.toLowerCase();
-    return Object.keys(this.data.tags)
-      .filter(tag => tag.toLowerCase().includes(searchTerm))
+    return Object.entries(this.data.tags)
+      .filter(([tag]) => tag.toLowerCase().includes(searchTerm))
       .sort((a, b) => {
-        // Exact matches first
-        if (a.toLowerCase() === searchTerm) return -1;
-        if (b.toLowerCase() === searchTerm) return 1;
-        
-        // Then starts with
-        const aStarts = a.toLowerCase().startsWith(searchTerm);
-        const bStarts = b.toLowerCase().startsWith(searchTerm);
+        const [tagA, statsA] = a;
+        const [tagB, statsB] = b;
+
+        const aLower = tagA.toLowerCase();
+        const bLower = tagB.toLowerCase();
+
+        if (aLower === searchTerm && bLower !== searchTerm) return -1;
+        if (bLower === searchTerm && aLower !== searchTerm) return 1;
+
+        const aStarts = aLower.startsWith(searchTerm);
+        const bStarts = bLower.startsWith(searchTerm);
         if (aStarts && !bStarts) return -1;
         if (!aStarts && bStarts) return 1;
-        
-        // Then by usage count
-        return this.data.tags[b] - this.data.tags[a];
-      });
+
+        return statsB.count - statsA.count;
+      })
+      .map(([tag]) => tag);
   }
 
   public getStats() {
@@ -245,12 +261,52 @@ export class NoteIndex {
   }
 
   private updateTagCounts(): void {
-    this.data.tags = {};
-    
+    const tags: { [key: string]: TagStats } = {};
+
     for (const entry of this.data.entries) {
       for (const tag of entry.tags) {
-        this.data.tags[tag] = (this.data.tags[tag] || 0) + 1;
+        const existing = tags[tag];
+        if (!existing) {
+          tags[tag] = {
+            count: 1,
+            firstUsed: entry.created,
+            lastUsed: entry.updated
+          };
+        } else {
+          existing.count += 1;
+          existing.firstUsed = Math.min(existing.firstUsed, entry.created);
+          existing.lastUsed = Math.max(existing.lastUsed, entry.updated);
+        }
       }
+    }
+
+    this.data.tags = tags;
+  }
+
+  private getTagSorter(sortOrder: TagSortOrder) {
+    switch (sortOrder) {
+      case 'created':
+        return (a: { firstUsed: number; tag: string }, b: { firstUsed: number; tag: string }) => {
+          if (a.firstUsed !== b.firstUsed) {
+            return a.firstUsed - b.firstUsed;
+          }
+          return a.tag.localeCompare(b.tag);
+        };
+      case 'recent':
+        return (a: { lastUsed: number; tag: string }, b: { lastUsed: number; tag: string }) => {
+          if (a.lastUsed !== b.lastUsed) {
+            return b.lastUsed - a.lastUsed;
+          }
+          return a.tag.localeCompare(b.tag);
+        };
+      case 'usage':
+      default:
+        return (a: { count: number; tag: string }, b: { count: number; tag: string }) => {
+          if (a.count !== b.count) {
+            return b.count - a.count;
+          }
+          return a.tag.localeCompare(b.tag);
+        };
     }
   }
 }
