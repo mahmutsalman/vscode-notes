@@ -198,13 +198,14 @@ export class SearchService {
 
       // Search in content
       if (options.includeContent) {
-        const content = options.caseSensitive ? note.content : note.content.toLowerCase();
+        const sanitized = this.stripHtml(note.content);
+        const content = options.caseSensitive ? sanitized : sanitized.toLowerCase();
         if (content.includes(searchTerm)) {
           score += 5;
           const startIndex = content.indexOf(searchTerm);
           matches.push({
             field: 'content',
-            value: note.content,
+            value: sanitized,
             indices: [[startIndex, startIndex + searchTerm.length - 1]]
           });
         }
@@ -283,5 +284,24 @@ export class SearchService {
       value: match.value,
       indices: match.indices || []
     }));
+  }
+
+  private stripHtml(value: string): string {
+    if (!value) {
+      return '';
+    }
+
+    const normalized = value
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>');
+
+    return normalized
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }

@@ -566,6 +566,12 @@ export class WebviewProvider {
         const styleUri = webview.asWebviewUri(
             vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'styles.css'))
         );
+        const quillStyleUri = webview.asWebviewUri(
+            vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'vendor', 'quill', 'quill.snow.css'))
+        );
+        const quillScriptUri = webview.asWebviewUri(
+            vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'vendor', 'quill', 'quill.min.js'))
+        );
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'noteEditor.js'))
         );
@@ -594,6 +600,7 @@ export class WebviewProvider {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Edit Note</title>
             <link href="${styleUri}" rel="stylesheet">
+            <link href="${quillStyleUri}" rel="stylesheet">
         </head>
         <body>
             <div class="editor-container">
@@ -636,7 +643,7 @@ export class WebviewProvider {
                     
                     <div class="main-editor">
                         <div class="text-editor">
-                            <textarea id="contentEditor" placeholder="Write your note here...">${this.escapeHtml(note.content)}</textarea>
+                            <div id="contentEditor" class="quill-editor"></div>
                         </div>
                         
                         <div class="image-gallery" id="imageGallery">
@@ -656,6 +663,7 @@ export class WebviewProvider {
                 window.iconUri = '${iconUri}';
                 console.log('Webview globals set:', { noteData: window.noteData, iconUri: window.iconUri });
             </script>
+            <script src="${quillScriptUri}"></script>
             <script src="${scriptUri}"></script>
         </body>
         </html>`;

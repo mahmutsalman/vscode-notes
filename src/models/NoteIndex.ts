@@ -56,10 +56,11 @@ export class NoteIndex {
     // Remove existing entry if it exists
     this.removeNote(note.id);
 
+    const content = this.stripHtml(note.content);
     const entry: NoteIndexEntry = {
       id: note.id,
       title: note.title,
-      content: note.content,
+      content,
       tags: note.tags,
       created: note.created,
       updated: note.updated,
@@ -249,7 +250,7 @@ export class NoteIndex {
 
   private getNoteType(note: Note): 'text' | 'image' | 'hybrid' {
     const hasImages = note.images && note.images.length > 0;
-    const hasContent = note.content && note.content.trim().length > 0;
+    const hasContent = this.stripHtml(note.content).length > 0;
 
     if (hasImages && hasContent) {
       return 'hybrid';
@@ -308,5 +309,24 @@ export class NoteIndex {
           return a.tag.localeCompare(b.tag);
         };
     }
+  }
+
+  private stripHtml(value: string): string {
+    if (!value) {
+      return '';
+    }
+
+    const normalized = value
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>');
+
+    return normalized
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }

@@ -11,6 +11,7 @@ out/
 
 # Local resources (personal notes)
 localResources/
+docs/
 
 # Extension generated user data
 .notes/

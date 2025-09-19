@@ -3,6 +3,8 @@
 
     // Global state
     let currentNote = null;
+    let quill = null;
+    let isLoadingEditorContent = false;
     let isDirty = false;
     let autoSaveTimeout = null;
     let currentColorFilter = 'all';
@@ -10,6 +12,7 @@
     // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
         initializeEditor();
+        initializeQuill();
         setupEventListeners();
         setupAutoSave();
         
@@ -47,6 +50,44 @@
         }
         
         console.log('✅ Editor initialization complete');
+    }
+
+    function initializeQuill() {
+        const editorContainer = document.getElementById('contentEditor');
+        if (!editorContainer) {
+            console.error('❌ Content editor container not found');
+            return;
+        }
+
+        if (typeof Quill === 'undefined') {
+            console.error('❌ Quill library is not available');
+            return;
+        }
+
+        quill = new Quill(editorContainer, {
+            theme: 'snow',
+            placeholder: 'Write your note here...',
+            modules: {
+                toolbar: [
+                    [{ header: [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ list: 'ordered' }, { list: 'bullet' }],
+                    [{ color: [] }, { background: [] }],
+                    [{ align: [] }],
+                    ['link', 'code-block'],
+                    ['clean']
+                ]
+            }
+        });
+
+        quill.on('text-change', () => {
+            if (isLoadingEditorContent) {
+                return;
+            }
+            markDirty();
+        });
+
+        console.log('🪶 Quill editor initialized');
     }
 
     function setupEventListeners() {
@@ -101,17 +142,11 @@
         
             // Form inputs
             const titleInput = document.getElementById('noteTitle');
-            const contentEditor = document.getElementById('contentEditor');
             const pinnedCheckbox = document.getElementById('pinnedCheckbox');
             
             if (titleInput) {
                 titleInput.addEventListener('input', markDirty);
                 console.log('✅ Title input listener added');
-            }
-            
-            if (contentEditor) {
-                contentEditor.addEventListener('input', markDirty);
-                console.log('✅ Content editor listener added');
             }
             
             if (pinnedCheckbox) {
@@ -197,7 +232,7 @@
         
         // Populate form fields
         document.getElementById('noteTitle').value = data.title || '';
-        document.getElementById('contentEditor').value = data.content || '';
+        setEditorContent(data.content || '');
         document.getElementById('pinnedCheckbox').checked = !!data.isPinned;
         
         // Load tags
@@ -211,6 +246,7 @@
         
         // Reset dirty state
         isDirty = false;
+        updateSaveButtonState();
     }
 
     function loadTags(tags) {
@@ -297,6 +333,52 @@
         container.innerHTML = filesHtml;
     }
 
+    function setEditorContent(content) {
+        if (quill) {
+            isLoadingEditorContent = true;
+            if (!content) {
+                quill.setText('', 'silent');
+            } else if (looksLikeHtml(content)) {
+                const delta = quill.clipboard.convert(content);
+                quill.setContents(delta, 'silent');
+            } else {
+                quill.setText(content, 'silent');
+            }
+            quill.setSelection(quill.getLength(), 0, 'silent');
+            isLoadingEditorContent = false;
+        } else {
+            const fallbackEditor = document.getElementById('contentEditor');
+            if (fallbackEditor) {
+                fallbackEditor.textContent = content;
+            }
+        }
+    }
+
+    function getEditorHtml() {
+        if (quill) {
+            if (quill.getLength() <= 1) {
+                return '';
+            }
+            return quill.root.innerHTML;
+        }
+
+        const fallbackEditor = document.getElementById('contentEditor');
+        return fallbackEditor ? fallbackEditor.textContent || '' : '';
+    }
+
+    function getEditorPlainText() {
+        if (quill) {
+            return quill.getText().trim();
+        }
+
+        const fallbackEditor = document.getElementById('contentEditor');
+        return fallbackEditor ? (fallbackEditor.textContent || '').trim() : '';
+    }
+
+    function looksLikeHtml(value) {
+        return /<\/?[a-z][\s\S]*>/i.test(value.trim());
+    }
+
     function markDirty() {
         if (!isDirty) {
             isDirty = true;
@@ -321,7 +403,7 @@
         try {
             const data = {
                 title: document.getElementById('noteTitle').value.trim() || 'Untitled Note',
-                content: document.getElementById('contentEditor').value,
+                content: getEditorHtml(),
                 tags: getCurrentTags(),
                 isPinned: document.getElementById('pinnedCheckbox').checked
             };
@@ -1305,6 +1387,12 @@
             case 'saveSuccess':
                 isDirty = false;
                 updateSaveButtonState();
+                if (currentNote) {
+                    currentNote.title = document.getElementById('noteTitle').value.trim() || currentNote.title;
+                    currentNote.content = getEditorHtml();
+                    currentNote.tags = getCurrentTags();
+                    currentNote.isPinned = document.getElementById('pinnedCheckbox').checked;
+                }
                 showNotification('Note saved successfully', 'success');
                 break;
                 
