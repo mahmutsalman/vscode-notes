@@ -10,6 +10,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private readonly sortStateKey = 'notes.allNotesSortOrder';
     private allNotesSortOrder: NoteSortOrder;
     private activeTagFilter: string | undefined;
+    private tagSearchText: string | undefined;
 
     constructor(
         private storageService: StorageService,
@@ -17,6 +18,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         private context: vscode.ExtensionContext
     ) {
         this.allNotesSortOrder = context.globalState.get<NoteSortOrder>(this.sortStateKey) ?? 'updated';
+        void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', false);
     }
 
     refresh(): void {
@@ -62,6 +64,33 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return this.activeTagFilter;
     }
 
+    setTagSearchText(value?: string): void {
+        const normalized = value?.trim() ?? '';
+        const nextValue = normalized.length > 0 ? normalized : undefined;
+
+        if (this.tagSearchText === nextValue) {
+            return;
+        }
+
+        this.tagSearchText = nextValue;
+        this.updateTagSearchContext();
+        this.refresh();
+    }
+
+    clearTagSearchText(): void {
+        if (this.tagSearchText === undefined) {
+            return;
+        }
+
+        this.tagSearchText = undefined;
+        this.updateTagSearchContext();
+        this.refresh();
+    }
+
+    getTagSearchText(): string | undefined {
+        return this.tagSearchText;
+    }
+
     getTreeItem(element: TreeItem): vscode.TreeItem {
         return element;
     }
@@ -96,6 +125,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         const filteredPinnedCount = filterTag
             ? pinnedNotes.filter(result => result.note.tags.includes(filterTag)).length
             : stats.pinnedNotes;
+        const tagSectionLabel = this.tagSearchText
+            ? `🏷️ Tags matching "${this.tagSearchText}"`
+            : '🏷️ Recent Tags';
+        const tagSectionTooltip = this.tagSearchText
+            ? `Showing tags that include "${this.tagSearchText}"`
+            : undefined;
 
         const items: TreeItem[] = [
             new TreeItem(
@@ -113,10 +148,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 filterTag ? `Pinned notes tagged with "${filterTag}"` : undefined
             ),
             new TreeItem(
-                '🏷️ Recent Tags',
+                tagSectionLabel,
                 vscode.TreeItemCollapsibleState.Collapsed,
                 'recentTagsContainer',
-                'tag.svg'
+                'tag.svg',
+                undefined,
+                tagSectionTooltip
             ),
             new TreeItem(
                 filterTag ? `📝 Notes tagged "${filterTag}" (${totalNotesCount})` : `📝 All Notes (${stats.totalNotes})`,
@@ -160,19 +197,36 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private async getRecentTags(): Promise<TreeItem[]> {
         const allTags = this.storageService.getIndex().getAllTags();
         const activeTag = this.activeTagFilter;
+        const searchText = this.tagSearchText?.toLowerCase();
+        const filteredTags = searchText
+            ? allTags.filter(tagInfo => tagInfo.tag.toLowerCase().includes(searchText))
+            : allTags;
+        const clearSearchItem = this.tagSearchText ? this.createClearTagSearchItem() : undefined;
         
-        if (allTags.length === 0) {
-            return [new TreeItem(
-                'No tags found',
+        if (filteredTags.length === 0) {
+            const emptyLabel = this.tagSearchText
+                ? 'No tags match your search'
+                : 'No tags found';
+            const emptyTooltip = this.tagSearchText
+                ? 'Try a different search or clear the filter'
+                : 'Create notes with tags to see them here';
+
+            const items: TreeItem[] = [];
+            if (clearSearchItem) {
+                items.push(clearSearchItem);
+            }
+            items.push(new TreeItem(
+                emptyLabel,
                 vscode.TreeItemCollapsibleState.None,
                 'empty',
                 undefined,
-                'Create notes with tags to see them here'
-            )];
+                emptyTooltip
+            ));
+            return items;
         }
         
         // Show top 10 most used tags
-        return allTags
+        const items = filteredTags
             .slice(0, 10)
             .map(tagInfo => {
                 const noteCountLabel = tagInfo.count === 1 ? '1 note' : `${tagInfo.count} notes`;
@@ -199,6 +253,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 
                 return item;
             });
+
+        if (clearSearchItem) {
+            return [clearSearchItem, ...items];
+        }
+
+        return items;
     }
 
     private async getAllNotes(): Promise<TreeItem[]> {
@@ -298,6 +358,29 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         };
 
         return item;
+    }
+
+    private createClearTagSearchItem(): TreeItem {
+        const item = new TreeItem(
+            'Clear tag search',
+            vscode.TreeItemCollapsibleState.None,
+            'clearTagSearch',
+            undefined,
+            'Reset tag search',
+            'Show the full list of tags'
+        );
+
+        item.iconPath = new vscode.ThemeIcon('clear-all');
+        item.command = {
+            command: 'notes.clearTagSearch',
+            title: 'Clear Tag Search'
+        };
+
+        return item;
+    }
+
+    private updateTagSearchContext(): void {
+        void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', this.tagSearchText !== undefined);
     }
 
     private buildNoteDescription(note: NoteIndexEntry): string {

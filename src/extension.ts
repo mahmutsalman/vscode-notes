@@ -170,7 +170,25 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`Failed to clear tag filter: ${error}`);
             }
         }),
-        
+
+        vscode.commands.registerCommand('notes.filterTags', async () => {
+            try {
+                await filterTags();
+            } catch (error) {
+                console.error('Failed to filter tags:', error);
+                vscode.window.showErrorMessage(`Failed to filter tags: ${error}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('notes.clearTagSearch', () => {
+            try {
+                notesProvider.clearTagSearchText();
+            } catch (error) {
+                console.error('Failed to clear tag search:', error);
+                vscode.window.showErrorMessage(`Failed to clear tag search: ${error}`);
+            }
+        }),
+
         // Code linking
         vscode.commands.registerCommand('notes.linkToCode', async () => {
             try {
@@ -463,6 +481,28 @@ async function searchNotesByTag(tag?: string) {
     if (selected) {
         await openNote(selected.noteId);
     }
+}
+
+async function filterTags() {
+    const currentFilter = notesProvider.getTagSearchText() ?? '';
+    const input = await vscode.window.showInputBox({
+        prompt: 'Filter tags',
+        placeHolder: 'Type to show tags that include this text',
+        value: currentFilter,
+        ignoreFocusOut: true
+    });
+
+    if (input === undefined) {
+        return;
+    }
+
+    const trimmed = input.trim();
+    if (trimmed.length === 0) {
+        notesProvider.clearTagSearchText();
+        return;
+    }
+
+    notesProvider.setTagSearchText(trimmed);
 }
 
 async function linkToCode() {

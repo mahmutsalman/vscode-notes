@@ -53,6 +53,18 @@
         "category": "Notes"
       },
       {
+        "command": "notes.filterTags",
+        "title": "Filter Tags",
+        "category": "Notes",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "notes.clearTagSearch",
+        "title": "Clear Tag Search",
+        "category": "Notes",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "notes.linkToCode",
         "title": "Link to Current Code",
         "category": "Notes",
@@ -171,6 +183,16 @@
           "command": "notes.sortAllNotes",
           "when": "view == notes.notesView",
           "group": "navigation@3"
+        },
+        {
+          "command": "notes.filterTags",
+          "when": "view == notes.notesView",
+          "group": "navigation@4"
+        },
+        {
+          "command": "notes.clearTagSearch",
+          "when": "view == notes.notesView && notes.tagSearchActive",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
