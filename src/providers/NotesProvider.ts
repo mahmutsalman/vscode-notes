@@ -2,15 +2,17 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { StorageService } from '../services/StorageService';
 import { SearchService } from '../services/SearchService';
-import { NoteIndexEntry, NoteSortOrder } from '../models/NoteIndex';
+import { NoteIndexEntry, NoteSortOrder, TagSortOrder } from '../models/NoteIndex';
 
 export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
     private readonly sortStateKey = 'notes.allNotesSortOrder';
+    private readonly tagSortStateKey = 'notes.tagSortOrder';
     private allNotesSortOrder: NoteSortOrder;
     private activeTagFilter: string | undefined;
     private tagSearchText: string | undefined;
+    private tagSortOrder: TagSortOrder;
 
     constructor(
         private storageService: StorageService,
@@ -18,6 +20,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         private context: vscode.ExtensionContext
     ) {
         this.allNotesSortOrder = context.globalState.get<NoteSortOrder>(this.sortStateKey) ?? 'updated';
+        this.tagSortOrder = context.globalState.get<TagSortOrder>(this.tagSortStateKey) ?? 'usage';
         void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', false);
     }
 
@@ -39,6 +42,10 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return this.allNotesSortOrder;
     }
 
+    getTagSortOrder(): TagSortOrder {
+        return this.tagSortOrder;
+    }
+
     setTagFilter(tag?: string): void {
         const normalized = tag?.trim() ?? '';
         const nextFilter = normalized.length > 0 ? normalized : undefined;
@@ -48,6 +55,16 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         }
 
         this.activeTagFilter = nextFilter;
+        this.refresh();
+    }
+
+    setTagSortOrder(order: TagSortOrder): void {
+        if (this.tagSortOrder === order) {
+            return;
+        }
+
+        this.tagSortOrder = order;
+        void this.context.globalState.update(this.tagSortStateKey, order);
         this.refresh();
     }
 
@@ -125,12 +142,13 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         const filteredPinnedCount = filterTag
             ? pinnedNotes.filter(result => result.note.tags.includes(filterTag)).length
             : stats.pinnedNotes;
+        const tagSortLabel = this.getTagSortLabel();
         const tagSectionLabel = this.tagSearchText
-            ? `🏷️ Tags matching "${this.tagSearchText}"`
-            : '🏷️ Recent Tags';
+            ? `🏷️ Tags matching "${this.tagSearchText}" (${tagSortLabel})`
+            : `🏷️ Tags (${tagSortLabel})`;
         const tagSectionTooltip = this.tagSearchText
-            ? `Showing tags that include "${this.tagSearchText}"`
-            : undefined;
+            ? `Tags that include "${this.tagSearchText}" sorted by ${tagSortLabel}`
+            : `Tags sorted by ${tagSortLabel}`;
 
         const items: TreeItem[] = [
             new TreeItem(
@@ -195,7 +213,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     private async getRecentTags(): Promise<TreeItem[]> {
-        const allTags = this.storageService.getIndex().getAllTags();
+        const allTags = this.storageService.getIndex().getAllTags(this.tagSortOrder);
         const activeTag = this.activeTagFilter;
         const searchText = this.tagSearchText?.toLowerCase();
         const filteredTags = searchText
@@ -233,16 +251,20 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 const description = tagInfo.tag === activeTag
                     ? `Active filter • ${noteCountLabel}`
                     : `${noteCountLabel} with this tag`;
-                const tooltip = tagInfo.tag === activeTag
-                    ? `Filtering notes by "${tagInfo.tag}"`
-                    : `${noteCountLabel} with this tag`;
+                const tooltipLines = [
+                    tagInfo.tag === activeTag
+                        ? `Filtering notes by "${tagInfo.tag}"`
+                        : description,
+                    `First used: ${this.formatTimestamp(tagInfo.firstUsed)}`,
+                    `Last used: ${this.formatTimestamp(tagInfo.lastUsed)}`
+                ];
                 const item = new TreeItem(
                     `${tagInfo.tag} (${tagInfo.count})`,
                     vscode.TreeItemCollapsibleState.None,
                     'tag',
                     'tag.svg',
                     description,
-                    tooltip
+                    tooltipLines.join('\n')
                 );
                 
                 item.command = {
@@ -381,6 +403,26 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private updateTagSearchContext(): void {
         void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', this.tagSearchText !== undefined);
+    }
+
+    private getTagSortLabel(): string {
+        switch (this.tagSortOrder) {
+            case 'created':
+                return 'Oldest first';
+            case 'recent':
+                return 'Last used';
+            case 'usage':
+            default:
+                return 'Most used';
+        }
+    }
+
+    private formatTimestamp(timestamp: number): string {
+        if (!timestamp) {
+            return 'Unknown';
+        }
+
+        return new Date(timestamp).toLocaleString();
     }
 
     private buildNoteDescription(note: NoteIndexEntry): string {
