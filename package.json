@@ -42,6 +42,17 @@
         "icon": "$(search)"
       },
       {
+        "command": "notes.searchByTag",
+        "title": "Search Notes by Tag",
+        "category": "Notes",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "notes.clearTagFilter",
+        "title": "Show All Notes",
+        "category": "Notes"
+      },
+      {
         "command": "notes.linkToCode",
         "title": "Link to Current Code",
         "category": "Notes",

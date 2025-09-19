@@ -153,6 +153,24 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         }),
         
+        vscode.commands.registerCommand('notes.searchByTag', async (tag?: string) => {
+            try {
+                await searchNotesByTag(tag);
+            } catch (error) {
+                console.error('Failed to search notes by tag:', error);
+                vscode.window.showErrorMessage(`Failed to search notes by tag: ${error}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('notes.clearTagFilter', () => {
+            try {
+                notesProvider.clearTagFilter();
+            } catch (error) {
+                console.error('Failed to clear tag filter:', error);
+                vscode.window.showErrorMessage(`Failed to clear tag filter: ${error}`);
+            }
+        }),
+        
         // Code linking
         vscode.commands.registerCommand('notes.linkToCode', async () => {
             try {
@@ -412,6 +430,36 @@ async function searchNotes() {
         placeHolder: 'Select a note to open'
     });
     
+    if (selected) {
+        await openNote(selected.noteId);
+    }
+}
+
+async function searchNotesByTag(tag?: string) {
+    if (!tag || typeof tag !== 'string') {
+        return;
+    }
+
+    notesProvider.setTagFilter(tag);
+
+    const results = searchService.searchByTag(tag);
+
+    if (results.length === 0) {
+        vscode.window.showInformationMessage(`No notes found with tag "${tag}"`);
+        return;
+    }
+
+    const items = results.map(result => ({
+        label: result.note.title,
+        description: result.note.tags.join(', '),
+        detail: new Date(result.note.updated).toLocaleString(),
+        noteId: result.note.id
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: `Notes tagged with "${tag}"`
+    });
+
     if (selected) {
         await openNote(selected.noteId);
     }

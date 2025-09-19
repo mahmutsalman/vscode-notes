@@ -9,6 +9,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
     private readonly sortStateKey = 'notes.allNotesSortOrder';
     private allNotesSortOrder: NoteSortOrder;
+    private activeTagFilter: string | undefined;
 
     constructor(
         private storageService: StorageService,
@@ -34,6 +35,31 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
 
     getAllNotesSortOrder(): NoteSortOrder {
         return this.allNotesSortOrder;
+    }
+
+    setTagFilter(tag?: string): void {
+        const normalized = tag?.trim() ?? '';
+        const nextFilter = normalized.length > 0 ? normalized : undefined;
+
+        if (this.activeTagFilter === nextFilter) {
+            return;
+        }
+
+        this.activeTagFilter = nextFilter;
+        this.refresh();
+    }
+
+    clearTagFilter(): void {
+        if (this.activeTagFilter === undefined) {
+            return;
+        }
+
+        this.activeTagFilter = undefined;
+        this.refresh();
+    }
+
+    getActiveTagFilter(): string | undefined {
+        return this.activeTagFilter;
     }
 
     getTreeItem(element: TreeItem): vscode.TreeItem {
@@ -62,7 +88,15 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async getRootItems(): Promise<TreeItem[]> {
         const stats = this.searchService.getSearchStats();
-        
+        const filterTag = this.activeTagFilter;
+        const totalNotesCount = filterTag
+            ? this.storageService.getIndex().getNotesByTag(filterTag).length
+            : stats.totalNotes;
+        const pinnedNotes = this.searchService.getPinnedNotes();
+        const filteredPinnedCount = filterTag
+            ? pinnedNotes.filter(result => result.note.tags.includes(filterTag)).length
+            : stats.pinnedNotes;
+
         const items: TreeItem[] = [
             new TreeItem(
                 'Search Notes',
@@ -71,10 +105,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 'search.svg'
             ),
             new TreeItem(
-                `📌 Pinned Notes (${stats.pinnedNotes})`,
+                filterTag ? `📌 Pinned Notes (${filteredPinnedCount})` : `📌 Pinned Notes (${stats.pinnedNotes})`,
                 vscode.TreeItemCollapsibleState.Collapsed,
                 'pinnedNotesContainer',
-                'pinned-note.svg'
+                'pinned-note.svg',
+                undefined,
+                filterTag ? `Pinned notes tagged with "${filterTag}"` : undefined
             ),
             new TreeItem(
                 '🏷️ Recent Tags',
@@ -83,10 +119,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 'tag.svg'
             ),
             new TreeItem(
-                `📝 All Notes (${stats.totalNotes})`,
+                filterTag ? `📝 Notes tagged "${filterTag}" (${totalNotesCount})` : `📝 All Notes (${stats.totalNotes})`,
                 vscode.TreeItemCollapsibleState.Expanded,
                 'allNotesContainer',
-                'all-notes.svg'
+                'all-notes.svg',
+                undefined,
+                filterTag ? `Showing notes tagged with "${filterTag}"` : undefined
             )
         ];
 
@@ -94,24 +132,34 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     private async getPinnedNotes(): Promise<TreeItem[]> {
+        const filterTag = this.activeTagFilter;
         const pinnedNotes = this.searchService.getPinnedNotes();
+        const results = filterTag
+            ? pinnedNotes.filter(result => result.note.tags.includes(filterTag))
+            : pinnedNotes;
         
-        if (pinnedNotes.length === 0) {
+        if (results.length === 0) {
+            const message = filterTag
+                ? `No pinned notes with "${filterTag}"`
+                : 'No pinned notes';
+            const tooltip = filterTag
+                ? '$(info) Pin a note with this tag to see it here'
+                : '$(info) Right-click a note to pin it';
             return [new TreeItem(
-                'No pinned notes',
+                message,
                 vscode.TreeItemCollapsibleState.None,
                 'empty',
                 undefined,
-                '$(info) Right-click a note to pin it'
+                tooltip
             )];
         }
 
-        return pinnedNotes.map(result => this.createNoteItem(result.note));
+        return results.map(result => this.createNoteItem(result.note));
     }
 
     private async getRecentTags(): Promise<TreeItem[]> {
-        const tags = this.searchService.getSearchStats();
         const allTags = this.storageService.getIndex().getAllTags();
+        const activeTag = this.activeTagFilter;
         
         if (allTags.length === 0) {
             return [new TreeItem(
@@ -122,17 +170,25 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 'Create notes with tags to see them here'
             )];
         }
-
+        
         // Show top 10 most used tags
         return allTags
             .slice(0, 10)
             .map(tagInfo => {
+                const noteCountLabel = tagInfo.count === 1 ? '1 note' : `${tagInfo.count} notes`;
+                const description = tagInfo.tag === activeTag
+                    ? `Active filter • ${noteCountLabel}`
+                    : `${noteCountLabel} with this tag`;
+                const tooltip = tagInfo.tag === activeTag
+                    ? `Filtering notes by "${tagInfo.tag}"`
+                    : `${noteCountLabel} with this tag`;
                 const item = new TreeItem(
                     `${tagInfo.tag} (${tagInfo.count})`,
                     vscode.TreeItemCollapsibleState.None,
                     'tag',
                     'tag.svg',
-                    `${tagInfo.count} notes with this tag`
+                    description,
+                    tooltip
                 );
                 
                 item.command = {
@@ -146,6 +202,32 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     private async getAllNotes(): Promise<TreeItem[]> {
+        const filterTag = this.activeTagFilter;
+
+        if (filterTag) {
+            const noteResults = this.searchService.searchByTag(filterTag);
+            const clearFilterItem = this.createClearFilterItem();
+
+            if (noteResults.length === 0) {
+                return [
+                    clearFilterItem,
+                    new TreeItem(
+                        `No notes found with "${filterTag}"`,
+                        vscode.TreeItemCollapsibleState.None,
+                        'empty',
+                        undefined,
+                        'Select another tag or clear the filter to see all notes'
+                    )
+                ];
+            }
+
+            const limitedResults = noteResults.slice(0, 50);
+            return [
+                clearFilterItem,
+                ...limitedResults.map(result => this.createNoteItem(result.note))
+            ];
+        }
+
         const noteResults = this.searchService.getNotesSortedBy(this.allNotesSortOrder, 50);
 
         if (noteResults.length === 0) {
@@ -194,6 +276,25 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
             command: 'notes.openNote',
             title: 'Open Note',
             arguments: [note.id]
+        };
+
+        return item;
+    }
+
+    private createClearFilterItem(): TreeItem {
+        const item = new TreeItem(
+            'Show all notes',
+            vscode.TreeItemCollapsibleState.None,
+            'clearTagFilter',
+            undefined,
+            'Clear tag filter',
+            'Clear the active tag filter and show all notes'
+        );
+
+        item.iconPath = new vscode.ThemeIcon('clear-all');
+        item.command = {
+            command: 'notes.clearTagFilter',
+            title: 'Show All Notes'
         };
 
         return item;
