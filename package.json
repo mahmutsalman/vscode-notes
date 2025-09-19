@@ -42,6 +42,17 @@
         "icon": "$(search)"
       },
       {
+        "command": "notes.searchByTag",
+        "title": "Search Notes by Tag",
+        "category": "Notes",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "notes.clearTagFilter",
+        "title": "Show All Notes",
+        "category": "Notes"
+      },
+      {
         "command": "notes.linkToCode",
         "title": "Link to Current Code",
         "category": "Notes",
@@ -64,6 +75,12 @@
         "title": "Refresh Notes",
         "category": "Notes",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "notes.sortAllNotes",
+        "title": "Change Sort Order",
+        "category": "Notes",
+        "icon": "$(list-selection)"
       },
       {
         "command": "notes.quickPasteImage",
@@ -149,6 +166,11 @@
           "command": "notes.refreshNotes",
           "when": "view == notes.notesView",
           "group": "navigation"
+        },
+        {
+          "command": "notes.sortAllNotes",
+          "when": "view == notes.notesView",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

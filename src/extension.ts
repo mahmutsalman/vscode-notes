@@ -6,6 +6,7 @@ import { StorageService } from './services/StorageService';
 import { ImageService } from './services/ImageService';
 import { SearchService } from './services/SearchService';
 import { NoteModel } from './models/Note';
+import { NoteSortOrder } from './models/NoteIndex';
 
 let storageService: StorageService;
 let imageService: ImageService;
@@ -152,6 +153,24 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         }),
         
+        vscode.commands.registerCommand('notes.searchByTag', async (tag?: string) => {
+            try {
+                await searchNotesByTag(tag);
+            } catch (error) {
+                console.error('Failed to search notes by tag:', error);
+                vscode.window.showErrorMessage(`Failed to search notes by tag: ${error}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('notes.clearTagFilter', () => {
+            try {
+                notesProvider.clearTagFilter();
+            } catch (error) {
+                console.error('Failed to clear tag filter:', error);
+                vscode.window.showErrorMessage(`Failed to clear tag filter: ${error}`);
+            }
+        }),
+        
         // Code linking
         vscode.commands.registerCommand('notes.linkToCode', async () => {
             try {
@@ -171,7 +190,47 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`Failed to refresh notes: ${error}`);
             }
         }),
-        
+
+        vscode.commands.registerCommand('notes.sortAllNotes', async (order?: NoteSortOrder) => {
+            try {
+                let targetOrder = order;
+
+                if (!targetOrder) {
+                    const currentOrder = notesProvider.getAllNotesSortOrder();
+                    const picks: Array<vscode.QuickPickItem & { order: NoteSortOrder }> = [
+                        {
+                            label: 'Last updated (newest first)',
+                            description: currentOrder === 'updated' ? 'Current' : undefined,
+                            picked: currentOrder === 'updated',
+                            order: 'updated'
+                        },
+                        {
+                            label: 'Creation date (newest first)',
+                            description: currentOrder === 'created' ? 'Current' : undefined,
+                            picked: currentOrder === 'created',
+                            order: 'created'
+                        }
+                    ];
+
+                    const selection = await vscode.window.showQuickPick(picks, {
+                        placeHolder: 'Choose how to sort notes',
+                        title: 'Sort Notes'
+                    });
+
+                    if (!selection) {
+                        return;
+                    }
+
+                    targetOrder = selection.order;
+                }
+
+                notesProvider.setAllNotesSortOrder(targetOrder);
+            } catch (error) {
+                console.error('Failed to update notes sort order:', error);
+                vscode.window.showErrorMessage(`Failed to update sort order: ${error}`);
+            }
+        }),
+
         // Internal commands
         vscode.commands.registerCommand('notes.openNote', async (noteId: string) => {
             try {
@@ -371,6 +430,36 @@ async function searchNotes() {
         placeHolder: 'Select a note to open'
     });
     
+    if (selected) {
+        await openNote(selected.noteId);
+    }
+}
+
+async function searchNotesByTag(tag?: string) {
+    if (!tag || typeof tag !== 'string') {
+        return;
+    }
+
+    notesProvider.setTagFilter(tag);
+
+    const results = searchService.searchByTag(tag);
+
+    if (results.length === 0) {
+        vscode.window.showInformationMessage(`No notes found with tag "${tag}"`);
+        return;
+    }
+
+    const items = results.map(result => ({
+        label: result.note.title,
+        description: result.note.tags.join(', '),
+        detail: new Date(result.note.updated).toLocaleString(),
+        noteId: result.note.id
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: `Notes tagged with "${tag}"`
+    });
+
     if (selected) {
         await openNote(selected.noteId);
     }
