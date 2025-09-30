@@ -29,12 +29,20 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     setAllNotesSortOrder(order: NoteSortOrder): void {
+        console.log('[NotesProvider] setAllNotesSortOrder called', {
+            currentOrder: this.allNotesSortOrder,
+            newOrder: order,
+            willSkip: this.allNotesSortOrder === order
+        });
+
         if (this.allNotesSortOrder === order) {
+            console.log('[NotesProvider] Skipping - same order');
             return;
         }
 
         this.allNotesSortOrder = order;
         void this.context.globalState.update(this.sortStateKey, order);
+        console.log('[NotesProvider] Triggering refresh with new order:', order);
         this.refresh();
     }
 
@@ -311,6 +319,15 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         }
 
         const noteResults = this.searchService.getNotesSortedBy(this.allNotesSortOrder, 50);
+        console.log('[NotesProvider] getAllNotes sorting', {
+            sortOrder: this.allNotesSortOrder,
+            resultCount: noteResults.length,
+            firstFew: noteResults.slice(0, 3).map(r => ({
+                title: r.note.title,
+                created: new Date(r.note.created).toLocaleString(),
+                updated: new Date(r.note.updated).toLocaleString()
+            }))
+        });
 
         if (noteResults.length === 0) {
             return [new TreeItem(
@@ -338,21 +355,25 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     private createNoteItem(note: NoteIndexEntry): TreeItem {
-        const icon = this.getIconForNoteType(note.type, note.isPinned);
         const title = note.title || 'Untitled Note';
         const description = this.buildNoteDescription(note);
         const tooltip = this.createNoteTooltip(note);
-        
+
         const item = new TreeItem(
             title,
             vscode.TreeItemCollapsibleState.None,
             'note',
-            icon,
+            undefined,
             description
         );
 
+        // Set the icon with color support
+        item.iconPath = this.getIconForNoteType(note.type, note.isPinned, note.color);
         item.tooltip = tooltip;
-        
+
+        // Store note ID for context menu commands
+        item.noteId = note.id;
+
         // Set command to open note when clicked
         item.command = {
             command: 'notes.openNote',
@@ -475,20 +496,26 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return date.toLocaleDateString(undefined, options);
     }
 
-    private getIconForNoteType(type: 'text' | 'image' | 'hybrid', isPinned?: boolean): string {
+    private getIconForNoteType(type: 'text' | 'image' | 'hybrid', isPinned?: boolean, color?: string): vscode.ThemeIcon | { light: vscode.Uri; dark: vscode.Uri } {
         if (isPinned) {
-            return 'pinned-note.svg';
+            return new vscode.ThemeIcon('pinned', color ? new vscode.ThemeColor(`notes.color.${color}`) : undefined);
         }
-        
+
+        let iconName: string;
         switch (type) {
             case 'image':
-                return 'note-image.svg';
+                iconName = 'file-media';
+                break;
             case 'hybrid':
-                return 'note-hybrid.svg';
+                iconName = 'file-media';
+                break;
             case 'text':
             default:
-                return 'note-text.svg';
+                iconName = 'note';
+                break;
         }
+
+        return new vscode.ThemeIcon(iconName, color ? new vscode.ThemeColor(`notes.color.${color}`) : undefined);
     }
 
     private createNoteTooltip(note: NoteIndexEntry): string {
@@ -519,6 +546,8 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
 }
 
 class TreeItem extends vscode.TreeItem {
+    public noteId?: string;
+
     constructor(
         public readonly label: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -528,15 +557,15 @@ class TreeItem extends vscode.TreeItem {
         tooltip?: string
     ) {
         super(label, collapsibleState);
-        
+
         if (description) {
             this.description = description;
         }
-        
+
         if (tooltip) {
             this.tooltip = tooltip;
         }
-        
+
         if (iconName) {
             this.iconPath = {
                 light: vscode.Uri.file(path.join(__filename, '..', '..', '..', 'media', 'icons', iconName)),

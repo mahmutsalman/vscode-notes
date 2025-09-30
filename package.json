@@ -117,6 +117,12 @@
         "title": "Open Note in New Panel (Test Split)",
         "category": "Notes",
         "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "notes.setNoteColor",
+        "title": "Set Note Color",
+        "category": "Notes",
+        "icon": "$(symbol-color)"
       }
     ],
     "keybindings": [
@@ -222,6 +228,12 @@
           "when": "view == notes.notesView && viewItem == note",
           "group": "navigation",
           "title": "Open in New Panel"
+        },
+        {
+          "command": "notes.setNoteColor",
+          "when": "view == notes.notesView && viewItem == note",
+          "group": "colors",
+          "title": "Set Color"
         }
       ],
       "editor/context": [
@@ -230,7 +242,81 @@
           "group": "notes"
         }
       ]
-    }
+    },
+    "colors": [
+      {
+        "id": "notes.color.red",
+        "description": "Red color for notes",
+        "defaults": {
+          "dark": "#f48771",
+          "light": "#d73a49",
+          "highContrast": "#ff6b6b"
+        }
+      },
+      {
+        "id": "notes.color.blue",
+        "description": "Blue color for notes",
+        "defaults": {
+          "dark": "#79b8ff",
+          "light": "#0366d6",
+          "highContrast": "#4dabf7"
+        }
+      },
+      {
+        "id": "notes.color.green",
+        "description": "Green color for notes",
+        "defaults": {
+          "dark": "#85e89d",
+          "light": "#28a745",
+          "highContrast": "#51cf66"
+        }
+      },
+      {
+        "id": "notes.color.purple",
+        "description": "Purple color for notes",
+        "defaults": {
+          "dark": "#b392f0",
+          "light": "#6f42c1",
+          "highContrast": "#9775fa"
+        }
+      },
+      {
+        "id": "notes.color.orange",
+        "description": "Orange color for notes",
+        "defaults": {
+          "dark": "#ffab70",
+          "light": "#e36209",
+          "highContrast": "#ff922b"
+        }
+      },
+      {
+        "id": "notes.color.yellow",
+        "description": "Yellow color for notes",
+        "defaults": {
+          "dark": "#ffd33d",
+          "light": "#f9c513",
+          "highContrast": "#ffd43b"
+        }
+      },
+      {
+        "id": "notes.color.pink",
+        "description": "Pink color for notes",
+        "defaults": {
+          "dark": "#ff7eb6",
+          "light": "#e91e63",
+          "highContrast": "#f783ac"
+        }
+      },
+      {
+        "id": "notes.color.cyan",
+        "description": "Cyan color for notes",
+        "defaults": {
+          "dark": "#76e3ea",
+          "light": "#17a2b8",
+          "highContrast": "#3bc9db"
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

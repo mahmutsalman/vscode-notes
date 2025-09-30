@@ -19,6 +19,8 @@ export interface LinkedFile {
   description?: string;
 }
 
+export type NoteColor = 'red' | 'blue' | 'green' | 'purple' | 'orange' | 'yellow' | 'pink' | 'cyan';
+
 export interface Note {
   $schema?: string;
   id: string;
@@ -30,6 +32,7 @@ export interface Note {
   images: NoteImage[];
   linkedFiles: LinkedFile[];
   isPinned?: boolean;
+  color?: NoteColor;
 }
 
 export class NoteModel implements Note {
@@ -43,6 +46,7 @@ export class NoteModel implements Note {
   images: NoteImage[];
   linkedFiles: LinkedFile[];
   isPinned?: boolean;
+  color?: NoteColor;
 
   constructor(data: Partial<Note> = {}) {
     this.id = data.id || this.generateId();
@@ -54,6 +58,7 @@ export class NoteModel implements Note {
     this.images = data.images || [];
     this.linkedFiles = data.linkedFiles || [];
     this.isPinned = data.isPinned || false;
+    this.color = data.color;
     this.$schema = data.$schema || 'https://schemas.notes.com/note-schema';
   }
 
@@ -140,6 +145,11 @@ export class NoteModel implements Note {
     return false;
   }
 
+  public setColor(color?: NoteColor): void {
+    this.color = color;
+    this.updated = Date.now();
+  }
+
   public toJSON(): Note {
     return {
       $schema: this.$schema,
@@ -151,7 +161,8 @@ export class NoteModel implements Note {
       updated: this.updated,
       images: this.images,
       linkedFiles: this.linkedFiles,
-      isPinned: this.isPinned
+      isPinned: this.isPinned,
+      color: this.color
     };
   }
 

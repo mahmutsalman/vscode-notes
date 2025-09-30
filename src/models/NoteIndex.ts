@@ -1,4 +1,4 @@
-import { Note } from './Note';
+import { Note, NoteColor } from './Note';
 
 export interface SearchResult {
   note: Note;
@@ -16,6 +16,7 @@ export interface NoteIndexEntry {
   type: 'text' | 'image' | 'hybrid';
   filePath: string;
   isPinned?: boolean;
+  color?: NoteColor;
 }
 
 export interface TagStats {
@@ -66,7 +67,8 @@ export class NoteIndex {
       updated: note.updated,
       type: this.getNoteType(note),
       filePath,
-      isPinned: note.isPinned
+      isPinned: note.isPinned,
+      color: note.color
     };
 
     this.data.entries.push(entry);

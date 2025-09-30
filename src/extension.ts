@@ -5,7 +5,7 @@ import { WebviewProvider } from './providers/WebviewProvider';
 import { StorageService } from './services/StorageService';
 import { ImageService } from './services/ImageService';
 import { SearchService } from './services/SearchService';
-import { NoteModel } from './models/Note';
+import { NoteModel, NoteColor } from './models/Note';
 import { NoteSortOrder, TagSortOrder } from './models/NoteIndex';
 
 let storageService: StorageService;
@@ -96,8 +96,15 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         }),
         
-        vscode.commands.registerCommand('notes.editNote', async (noteId?: string) => {
+        vscode.commands.registerCommand('notes.editNote', async (treeItemOrNoteId?: any) => {
             try {
+                // Handle both tree item (from context menu) and direct note ID
+                let noteId: string | undefined;
+                if (typeof treeItemOrNoteId === 'string') {
+                    noteId = treeItemOrNoteId;
+                } else if (treeItemOrNoteId && treeItemOrNoteId.noteId) {
+                    noteId = treeItemOrNoteId.noteId;
+                }
                 await editNote(noteId);
             } catch (error) {
                 console.error('Failed to edit note:', error);
@@ -105,8 +112,15 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         }),
         
-        vscode.commands.registerCommand('notes.deleteNote', async (noteId?: string) => {
+        vscode.commands.registerCommand('notes.deleteNote', async (treeItemOrNoteId?: any) => {
             try {
+                // Handle both tree item (from context menu) and direct note ID
+                let noteId: string | undefined;
+                if (typeof treeItemOrNoteId === 'string') {
+                    noteId = treeItemOrNoteId;
+                } else if (treeItemOrNoteId && treeItemOrNoteId.noteId) {
+                    noteId = treeItemOrNoteId.noteId;
+                }
                 await deleteNote(noteId);
             } catch (error) {
                 console.error('Failed to delete note:', error);
@@ -212,7 +226,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('notes.sortAllNotes', async (order?: NoteSortOrder) => {
             try {
                 console.log('[notes] Command notes.sortAllNotes invoked', { order });
-                let targetOrder = order;
+                // Validate that order is actually a valid NoteSortOrder value
+                const isValidOrder = order && (order === 'created' || order === 'updated');
+                let targetOrder = isValidOrder ? order : undefined;
 
                 if (!targetOrder) {
                     const currentOrder = notesProvider.getAllNotesSortOrder();
@@ -245,8 +261,15 @@ function registerCommands(context: vscode.ExtensionContext) {
                     console.log('[notes] notes.sortAllNotes selection', { selectedOrder: targetOrder });
                 }
 
+                console.log('[notes] notes.sortAllNotes applying order', {
+                    currentOrder: notesProvider.getAllNotesSortOrder(),
+                    targetOrder
+                });
                 notesProvider.setAllNotesSortOrder(targetOrder);
-                console.log('[notes] notes.sortAllNotes applied', { appliedOrder: targetOrder });
+                console.log('[notes] notes.sortAllNotes applied', {
+                    appliedOrder: targetOrder,
+                    newCurrentOrder: notesProvider.getAllNotesSortOrder()
+                });
             } catch (error) {
                 console.error('Failed to update notes sort order:', error);
                 vscode.window.showErrorMessage(`Failed to update sort order: ${error}`);
@@ -259,6 +282,23 @@ function registerCommands(context: vscode.ExtensionContext) {
             } catch (error) {
                 console.error('Failed to sort tags:', error);
                 vscode.window.showErrorMessage(`Failed to sort tags: ${error}`);
+            }
+        }),
+
+        // Color management
+        vscode.commands.registerCommand('notes.setNoteColor', async (treeItemOrNoteId?: any) => {
+            try {
+                // Handle both tree item (from context menu) and direct note ID
+                let noteId: string | undefined;
+                if (typeof treeItemOrNoteId === 'string') {
+                    noteId = treeItemOrNoteId;
+                } else if (treeItemOrNoteId && treeItemOrNoteId.noteId) {
+                    noteId = treeItemOrNoteId.noteId;
+                }
+                await setNoteColor(noteId);
+            } catch (error) {
+                console.error('Failed to set note color:', error);
+                vscode.window.showErrorMessage(`Failed to set note color: ${error}`);
             }
         }),
 
@@ -779,6 +819,104 @@ async function performGlobalColorCycling(note: NoteModel): Promise<void> {
     );
     
     console.log(`✅ Global color cycling completed: ${nextColorName} assigned to image in "${note.title}"`);
+}
+
+async function setNoteColor(noteId?: string) {
+    if (!noteId) {
+        vscode.window.showErrorMessage('No note selected for color assignment');
+        return;
+    }
+
+    const note = await storageService.loadNote(noteId);
+    if (!note) {
+        vscode.window.showErrorMessage('Note not found');
+        return;
+    }
+
+    // Define color options with icons and descriptions
+    interface ColorOption extends vscode.QuickPickItem {
+        color?: NoteColor;
+    }
+
+    const colorOptions: ColorOption[] = [
+        {
+            label: 'Default',
+            description: 'No color (default theme)',
+            color: undefined
+        },
+        {
+            label: '🔴 Red',
+            description: 'High priority or urgent notes',
+            color: 'red'
+        },
+        {
+            label: '🔵 Blue',
+            description: 'Information or reference notes',
+            color: 'blue'
+        },
+        {
+            label: '🟢 Green',
+            description: 'Completed or positive notes',
+            color: 'green'
+        },
+        {
+            label: '🟣 Purple',
+            description: 'Creative or brainstorming notes',
+            color: 'purple'
+        },
+        {
+            label: '🟠 Orange',
+            description: 'Ideas or inspiration notes',
+            color: 'orange'
+        },
+        {
+            label: '🟡 Yellow',
+            description: 'Warnings or reminders',
+            color: 'yellow'
+        },
+        {
+            label: '🩷 Pink',
+            description: 'Personal or favorite notes',
+            color: 'pink'
+        },
+        {
+            label: '🩵 Cyan',
+            description: 'Cool or technical notes',
+            color: 'cyan'
+        }
+    ];
+
+    // Mark current color as selected
+    const currentColorOption = colorOptions.find(option => option.color === note.color);
+    if (currentColorOption) {
+        currentColorOption.description += ' (current)';
+        currentColorOption.picked = true;
+    } else {
+        colorOptions[0].description += ' (current)';
+        colorOptions[0].picked = true;
+    }
+
+    const selectedOption = await vscode.window.showQuickPick(colorOptions, {
+        placeHolder: `Choose a color for "${note.title}"`,
+        title: 'Set Note Color'
+    });
+
+    if (!selectedOption) {
+        return;
+    }
+
+    // Update note color
+    note.setColor(selectedOption.color);
+    await storageService.saveNote(note);
+
+    // Update search index
+    searchService.updateIndex(storageService.getIndex());
+
+    // Refresh tree view
+    notesProvider.refresh();
+
+    const colorName = selectedOption.color ? selectedOption.color : 'default';
+    vscode.window.showInformationMessage(`Note "${note.title}" color set to ${colorName}`);
 }
 
 async function showWelcomeMessage(context: vscode.ExtensionContext) {
