@@ -80,11 +80,30 @@
             }
         });
 
-        quill.on('text-change', () => {
+        // Get reference to the scrollable container
+        const scrollContainer = document.querySelector('.editor-content');
+        let savedScrollPosition = null;
+
+        // Preserve scroll position before text changes
+        quill.on('text-change', (delta, oldDelta, source) => {
             if (isLoadingEditorContent) {
                 return;
             }
+
+            // Save scroll position before content update
+            if (scrollContainer && source === 'user') {
+                savedScrollPosition = scrollContainer.scrollTop;
+            }
+
             markDirty();
+
+            // Restore scroll position after content update
+            if (scrollContainer && savedScrollPosition !== null && source === 'user') {
+                requestAnimationFrame(() => {
+                    scrollContainer.scrollTop = savedScrollPosition;
+                    savedScrollPosition = null;
+                });
+            }
         });
 
         console.log('🪶 Quill editor initialized');
