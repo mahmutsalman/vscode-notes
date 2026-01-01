@@ -515,7 +515,11 @@
             this.dragStartY = 0;
             this.dragStartPanX = 0;
             this.dragStartPanY = 0;
-            
+
+            // Dimension tracking for resize handling
+            this.baseWidth = 0;
+            this.baseHeight = 0;
+
             console.log(`🖼️ Opening image modal: ${this.currentIndex + 1} of ${this.images.length}`);
             
             if (this.images.length === 0) {
@@ -525,6 +529,7 @@
             
             this.createModal();
             this.attachEventListeners();
+            this.attachResizeListener();
             this.preloadAdjacentImages();
             this.updateDisplay();
         }
@@ -536,22 +541,47 @@
             this.modal.innerHTML = `
                 <div class="image-modal-container">
                     <div class="image-modal-header">
-                        <div class="image-modal-counter">
-                            <span id="imageCounter">${this.currentIndex + 1} / ${this.images.length}</span>
+                        <!-- Left Side: Info Section -->
+                        <div class="image-modal-left">
+                            <div class="image-counter-row">
+                                <span id="imageCounter" class="image-modal-counter">${this.currentIndex + 1} / ${this.images.length}</span>
+                                <button class="image-info-btn" aria-label="Image information" title="Show image info">
+                                    <span class="info-icon">ℹ️</span>
+                                </button>
+                            </div>
+
+                            <!-- Hidden tooltip that shows on hover -->
+                            <div class="image-info-tooltip">
+                                <div class="info-row">
+                                    <span class="info-label">File:</span>
+                                    <span id="imageFilename" class="info-value"></span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">Size:</span>
+                                    <span id="imageDimensions" class="info-value"></span>
+                                </div>
+                                <div class="info-row info-tip">
+                                    <span class="zoom-hint">Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="image-modal-zoom-controls">
-                            <button class="zoom-btn" id="zoomOut" aria-label="Zoom Out" title="Zoom Out (- or Ctrl+Mouse Wheel)">−</button>
-                            <span class="zoom-indicator" id="zoomIndicator">100%</span>
-                            <button class="zoom-btn" id="zoomIn" aria-label="Zoom In" title="Zoom In (+ or Ctrl+Mouse Wheel)">+</button>
-                            <button class="zoom-btn" id="zoomReset" aria-label="Reset Zoom" title="Reset Zoom (Double-click)">⌂</button>
+
+                        <!-- Right Side: Controls Section -->
+                        <div class="image-modal-right">
+                            <div class="image-modal-zoom-controls">
+                                <button class="zoom-btn" id="zoomOut" aria-label="Zoom Out" title="Zoom Out (- or Ctrl+Mouse Wheel)">−</button>
+                                <span class="zoom-indicator" id="zoomIndicator">100%</span>
+                                <button class="zoom-btn" id="zoomIn" aria-label="Zoom In" title="Zoom In (+ or Ctrl+Mouse Wheel)">+</button>
+                                <button class="zoom-btn" id="zoomReset" aria-label="Reset Zoom" title="Reset Zoom (Double-click)">⌂</button>
+                            </div>
+                            <div class="image-modal-color-controls">
+                                <button class="color-btn" data-color="green" title="Assign Green (Press 1)">●</button>
+                                <button class="color-btn" data-color="blue" title="Assign Blue (Press 2)">●</button>
+                                <button class="color-btn" data-color="purple" title="Assign Purple (Press 3)">●</button>
+                                <button class="color-btn clear-color" data-color="" title="Clear Color (Press 0)">○</button>
+                            </div>
+                            <button class="image-modal-close" id="closeModal" aria-label="Close">✕</button>
                         </div>
-                        <div class="image-modal-color-controls">
-                            <button class="color-btn" data-color="green" title="Assign Green (Press 1)">●</button>
-                            <button class="color-btn" data-color="blue" title="Assign Blue (Press 2)">●</button>
-                            <button class="color-btn" data-color="purple" title="Assign Purple (Press 3)">●</button>
-                            <button class="color-btn clear-color" data-color="" title="Clear Color (Press 0)">○</button>
-                        </div>
-                        <button class="image-modal-close" id="closeModal" aria-label="Close">✕</button>
                     </div>
                     <div class="image-modal-body">
                         <button class="image-modal-nav image-modal-prev" id="prevImage" aria-label="Previous image">‹</button>
@@ -560,13 +590,6 @@
                             <div class="image-modal-loading" id="imageLoading">Loading...</div>
                         </div>
                         <button class="image-modal-nav image-modal-next" id="nextImage" aria-label="Next image">›</button>
-                    </div>
-                    <div class="image-modal-footer">
-                        <div class="image-modal-info">
-                            <span id="imageFilename"></span>
-                            <span id="imageDimensions"></span>
-                            <span class="zoom-hint">Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan</span>
-                        </div>
                     </div>
                 </div>
             `;
@@ -631,19 +654,28 @@
             // Image load events
             this.currentImage.onload = () => {
                 this.hideLoading();
-                
+
+                // Calculate and apply optimal dimensions
+                this.applyImageDimensions();
+
                 // Always set to 100% zoom and center positioning
                 this.zoomLevel = 1.0;
                 this.panX = 0;
                 this.panY = 0;
                 this.setImagePosition('center');
                 this.disableScrollMode();
-                
+
                 this.applyTransform();
                 this.updateZoomIndicator();
                 this.updateCursor();
-                
-                console.log('📏 Image loaded at 100% zoom');
+
+                const dims = this.calculateImageDimensions(
+                    this.currentImage.naturalWidth,
+                    this.currentImage.naturalHeight
+                );
+                console.log(`📏 Image loaded: ${dims.naturalWidth}×${dims.naturalHeight} ` +
+                            `→ ${Math.round(dims.width)}×${Math.round(dims.height)} ` +
+                            `(${Math.round(dims.scale * 100)}% of natural size)`);
             };
             this.currentImage.onerror = () => this.handleImageError();
         }
@@ -1134,10 +1166,132 @@
                 }
             }
         }
-        
+
+        calculateAvailableSpace() {
+            // Get viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // Get actual header and footer heights
+            const header = document.querySelector('.image-modal-header');
+            const footer = document.querySelector('.image-modal-footer');
+
+            const headerHeight = header ? header.offsetHeight : 0;
+            const footerHeight = footer ? footer.offsetHeight : 0;
+
+            // Calculate available space (98% of viewport minus header/footer)
+            const availableWidth = viewportWidth * 0.98;
+            const availableHeight = (viewportHeight - headerHeight - footerHeight) * 0.98;
+
+            return {
+                width: availableWidth,
+                height: availableHeight,
+                viewportWidth,
+                viewportHeight
+            };
+        }
+
+        calculateImageDimensions(naturalWidth, naturalHeight) {
+            const available = this.calculateAvailableSpace();
+
+            // Calculate aspect ratios
+            const imageAspectRatio = naturalWidth / naturalHeight;
+            const containerAspectRatio = available.width / available.height;
+
+            let displayWidth, displayHeight;
+
+            // Determine which dimension is the limiting factor
+            if (imageAspectRatio > containerAspectRatio) {
+                // Image is wider - limit by width
+                displayWidth = Math.min(naturalWidth, available.width);
+                displayHeight = displayWidth / imageAspectRatio;
+            } else {
+                // Image is taller - limit by height
+                displayHeight = Math.min(naturalHeight, available.height);
+                displayWidth = displayHeight * imageAspectRatio;
+            }
+
+            // Don't upscale small images beyond natural size
+            if (displayWidth > naturalWidth || displayHeight > naturalHeight) {
+                displayWidth = naturalWidth;
+                displayHeight = naturalHeight;
+            }
+
+            return {
+                width: displayWidth,
+                height: displayHeight,
+                naturalWidth,
+                naturalHeight,
+                scale: Math.min(displayWidth / naturalWidth, displayHeight / naturalHeight)
+            };
+        }
+
+        applyImageDimensions() {
+            if (!this.currentImage || !this.currentImage.naturalWidth) return;
+
+            const dims = this.calculateImageDimensions(
+                this.currentImage.naturalWidth,
+                this.currentImage.naturalHeight
+            );
+
+            // Apply calculated dimensions directly to image
+            this.currentImage.style.width = `${dims.width}px`;
+            this.currentImage.style.height = `${dims.height}px`;
+
+            // Store base dimensions for zoom calculations
+            this.baseWidth = dims.width;
+            this.baseHeight = dims.height;
+        }
+
+        attachResizeListener() {
+            // Debounce resize events for performance
+            let resizeTimeout;
+
+            this.resizeHandler = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    this.handleResize();
+                }, 150); // 150ms debounce
+            };
+
+            window.addEventListener('resize', this.resizeHandler);
+        }
+
+        handleResize() {
+            if (!this.currentImage || !this.currentImage.complete) return;
+
+            console.log('📐 Window resized - recalculating image dimensions');
+
+            // Store current zoom state
+            const previousZoom = this.zoomLevel;
+            const previousPanX = this.panX;
+            const previousPanY = this.panY;
+
+            // Recalculate base image size
+            this.applyImageDimensions();
+
+            // Restore zoom state if zoomed in
+            if (previousZoom > 1.0) {
+                this.zoomLevel = previousZoom;
+                this.panX = previousPanX;
+                this.panY = previousPanY;
+
+                // Reapply constraints with new dimensions
+                this.constrainPan();
+                this.applyTransform();
+            }
+
+            this.updateZoomIndicator();
+        }
+
         close() {
             console.log('🔄 Closing image modal');
-            
+
+            // Remove resize listener
+            if (this.resizeHandler) {
+                window.removeEventListener('resize', this.resizeHandler);
+            }
+
             // Remove event listeners
             if (this.keyboardHandler) {
                 document.removeEventListener('keydown', this.keyboardHandler);
