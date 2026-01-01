@@ -561,7 +561,7 @@
                                     <span id="imageDimensions" class="info-value"></span>
                                 </div>
                                 <div class="info-row info-tip">
-                                    <span class="zoom-hint">Tip: Cmd/Ctrl + Mouse Wheel to zoom, drag to pan</span>
+                                    <span class="zoom-hint">Tip: Mouse Wheel to zoom, drag to pan</span>
                                 </div>
                             </div>
                         </div>
@@ -731,17 +731,13 @@
         }
         
         handleWheel(event) {
-            // Only handle wheel events with Cmd (Mac) or Ctrl (Win/Linux) key pressed
-            if (!event.ctrlKey && !event.metaKey) {
-                return;
-            }
-            
+            // Mouse wheel zooms without modifier keys for better UX
             event.preventDefault();
-            
+
             // Normalize wheel delta across different browsers
             const delta = event.deltaY || event.detail || event.wheelDelta;
             const zoomDelta = delta > 0 ? -this.zoomStep : this.zoomStep;
-            
+
             this.setZoom(this.zoomLevel + zoomDelta);
         }
         
@@ -1082,7 +1078,7 @@
                 // Update hint text
                 const hintElement = document.querySelector('.zoom-hint');
                 if (hintElement) {
-                    hintElement.textContent = 'Tip: Scroll to navigate tall image, Cmd/Ctrl + Mouse Wheel to zoom';
+                    hintElement.textContent = 'Tip: Scroll to navigate tall image, Mouse Wheel to zoom';
                 }
                 
                 console.log('📜 Enabled scroll mode for tall image');
