@@ -9,6 +9,19 @@
     let autoSaveTimeout = null;
     let currentColorFilter = 'all';
 
+	    // Paste-specific scroll preservation
+	    let pasteState = {
+	        isPasting: false,
+	        scrollPositions: {
+	            editorContent: 0,
+	            quillScroll: 0
+	        },
+	        cursorPosition: null,
+	        pasteTimestamp: 0,
+	        lockId: 0,
+	        cleanupScrollLock: null
+	    };
+
     // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
         initializeEditor();
@@ -84,18 +97,36 @@
         const scrollContainer = document.querySelector('.editor-content');
         let savedScrollPosition = null;
 
-        // Preserve scroll position before text changes
-        quill.on('text-change', (delta, oldDelta, source) => {
-            if (isLoadingEditorContent) {
-                return;
-            }
+	        // Preserve scroll position before text changes
+	        quill.on('text-change', (delta, oldDelta, source) => {
+	            if (isLoadingEditorContent) {
+	                return; // Skip if loading content
+	            }
+
+	            // Mark as dirty for all user changes (including paste)
+	            markDirty();
+
+	            // Skip scroll preservation during paste - paste scroll lock will handle it
+	            if (pasteState.isPasting) {
+	                if (window.__PASTE_DEBUG__) {
+	                    const editorContent = document.querySelector('.editor-content');
+	                    const quillScroll = quill?.scrollingContainer || quill?.root;
+	                    console.log('[PASTE-DEBUG] text-change event fired', {
+	                        source,
+	                        isPasting: pasteState.isPasting,
+	                        scrollPositions: {
+	                            editorContent: editorContent?.scrollTop,
+	                            quillScroll: quillScroll?.scrollTop
+	                        }
+	                    });
+	                }
+	                return;
+	            }
 
             // Save scroll position before content update
             if (scrollContainer && source === 'user') {
                 savedScrollPosition = scrollContainer.scrollTop;
             }
-
-            markDirty();
 
             // Restore scroll position after content update
             if (scrollContainer && savedScrollPosition !== null && source === 'user') {
@@ -104,7 +135,24 @@
                     savedScrollPosition = null;
                 });
             }
-        });
+	        });
+
+	        // Optional diagnostics for paste-related selection changes
+	        quill.on('selection-change', function(range, oldRange, source) {
+	            if (!pasteState.isPasting || !window.__PASTE_DEBUG__) return;
+	            const editorContent = document.querySelector('.editor-content');
+	            const quillScroll = quill?.scrollingContainer || quill?.root;
+	            console.log('[PASTE-DEBUG] selection-change event fired', {
+	                source,
+	                range,
+	                isPasting: pasteState.isPasting,
+	                scrollPositions: {
+	                    editorContent: editorContent?.scrollTop,
+	                    quillScroll: quillScroll?.scrollTop
+	                },
+	                timeSincePaste: Date.now() - pasteState.pasteTimestamp
+	            });
+	        });
 
         console.log('🪶 Quill editor initialized');
     }
@@ -222,11 +270,11 @@
             }
         });
         
-        // Keyboard shortcuts
-        document.addEventListener('keydown', handleKeyboardShortcuts);
-        
-        // Paste handling for images
-        document.addEventListener('paste', handlePaste);
+	        // Keyboard shortcuts
+	        document.addEventListener('keydown', handleKeyboardShortcuts);
+	        
+	        // Paste handling for images
+	        document.addEventListener('paste', handlePaste, true);
         
         // Listen for messages from extension
         if (window.vscode) {
@@ -1524,18 +1572,161 @@
         }
     }
 
-    function handlePaste(e) {
-        const items = e.clipboardData?.items;
-        if (!items) return;
-        
-        for (let item of items) {
-            if (item.type.startsWith('image/')) {
-                e.preventDefault();
-                addImage(); // Trigger image add which will handle clipboard
-                break;
-            }
-        }
-    }
+	    function handlePaste(e) {
+	        const items = e.clipboardData?.items;
+	        const isInQuillEditor = !!(quill?.root && e.target && quill.root.contains(e.target));
+
+	        // Preserve scroll only for paste events targeting the Quill editor
+	        if (isInQuillEditor) {
+	            capturePasteScrollState();
+	            beginPasteScrollLock();
+	        }
+
+	        if (!items) return;
+
+	        // Handle image paste
+	        for (let item of items) {
+	            if (item.type.startsWith('image/')) {
+	                e.preventDefault();
+	                e.stopImmediatePropagation();
+	                addImage();
+	                break;
+	            }
+	        }
+	    }
+
+	    function capturePasteScrollState() {
+	        const editorContent = document.querySelector('.editor-content');
+	        const quillScroll = quill?.scrollingContainer || quill?.root || document.querySelector('.ql-editor');
+
+	        pasteState.isPasting = true;
+	        pasteState.scrollPositions = {
+	            editorContent: editorContent?.scrollTop ?? 0,
+	            quillScroll: quillScroll?.scrollTop ?? 0
+	        };
+	        pasteState.cursorPosition = quill?.getSelection()?.index ?? 0;
+	        pasteState.pasteTimestamp = Date.now();
+
+	        if (window.__PASTE_DEBUG__) {
+	            console.log('[PASTE-DEBUG] === PASTE EVENT FIRED ===');
+	            console.log('[PASTE-DEBUG] Timestamp:', pasteState.pasteTimestamp);
+	            console.log('[PASTE-DEBUG] Initial scroll positions:', {
+	                editorContent: editorContent?.scrollTop,
+	                quillScroll: quillScroll?.scrollTop
+	            });
+	            console.log('[PASTE-DEBUG] Captured state:', {
+	                isPasting: pasteState.isPasting,
+	                scrollPositions: pasteState.scrollPositions,
+	                cursorPosition: pasteState.cursorPosition,
+	                pasteTimestamp: pasteState.pasteTimestamp
+	            });
+	        }
+	    }
+
+	    function restorePasteScrollPosition(lockId, reason) {
+	        if (!pasteState.isPasting || pasteState.lockId !== lockId) return;
+
+	        const editorContent = document.querySelector('.editor-content');
+	        const quillScroll = quill?.scrollingContainer || quill?.root || document.querySelector('.ql-editor');
+
+	        if (window.__PASTE_DEBUG__) {
+	            console.log('[PASTE-DEBUG] === RESTORE FUNCTION CALLED ===', { reason });
+	            console.log('[PASTE-DEBUG] Current scroll BEFORE restore:', {
+	                editorContent: editorContent?.scrollTop,
+	                quillScroll: quillScroll?.scrollTop
+	            });
+	            console.log('[PASTE-DEBUG] Attempting to restore to:', pasteState.scrollPositions);
+	        }
+
+	        if (editorContent) {
+	            editorContent.scrollTop = pasteState.scrollPositions.editorContent;
+	        }
+	        if (quillScroll) {
+	            quillScroll.scrollTop = pasteState.scrollPositions.quillScroll;
+	        }
+
+	        if (window.__PASTE_DEBUG__) {
+	            console.log('[PASTE-DEBUG] Scroll AFTER restore:', {
+	                editorContent: editorContent?.scrollTop,
+	                quillScroll: quillScroll?.scrollTop
+	            });
+	        }
+	    }
+
+	    function beginPasteScrollLock() {
+	        if (!pasteState.isPasting) return;
+
+	        if (typeof pasteState.cleanupScrollLock === 'function') {
+	            pasteState.cleanupScrollLock();
+	            pasteState.isPasting = true;
+	        }
+
+	        const lockId = ++pasteState.lockId;
+	        const editorContent = document.querySelector('.editor-content');
+	        const quillScroll = quill?.scrollingContainer || quill?.root || document.querySelector('.ql-editor');
+	        const targets = [editorContent, quillScroll].filter((el, idx, arr) => !!el && arr.indexOf(el) === idx);
+
+	        const onScroll = () => restorePasteScrollPosition(lockId, 'scroll');
+	        for (const target of targets) {
+	            target.addEventListener('scroll', onScroll);
+	        }
+
+	        const startTime = performance.now();
+	        const maxFrames = 20;
+	        const maxDurationMs = 300;
+	        let frameCount = 0;
+	        let stableFrames = 0;
+
+	        const isStable = () => {
+	            const tolerance = 1;
+	            const editorOk =
+	                !editorContent ||
+	                Math.abs(editorContent.scrollTop - pasteState.scrollPositions.editorContent) <= tolerance;
+	            const quillOk =
+	                !quillScroll ||
+	                Math.abs(quillScroll.scrollTop - pasteState.scrollPositions.quillScroll) <= tolerance;
+	            return editorOk && quillOk;
+	        };
+
+	        const cleanup = () => {
+	            if (pasteState.lockId !== lockId) return;
+	            for (const target of targets) {
+	                target.removeEventListener('scroll', onScroll);
+	            }
+	            pasteState.isPasting = false;
+	            pasteState.cleanupScrollLock = null;
+
+	            if (window.__PASTE_DEBUG__) {
+	                console.log('[PASTE-DEBUG] Paste scroll lock ended', { frameCount, stableFrames });
+	            }
+	        };
+
+	        pasteState.cleanupScrollLock = cleanup;
+
+	        const tick = () => {
+	            if (!pasteState.isPasting || pasteState.lockId !== lockId) return;
+	            frameCount += 1;
+
+	            restorePasteScrollPosition(lockId, 'raf');
+
+	            stableFrames = isStable() ? stableFrames + 1 : 0;
+	            const elapsed = performance.now() - startTime;
+
+	            if ((stableFrames >= 3 && frameCount >= 3) || frameCount >= maxFrames || elapsed >= maxDurationMs) {
+	                cleanup();
+	                return;
+	            }
+
+	            requestAnimationFrame(tick);
+	        };
+
+	        // Enforce scroll position during Quill's internal paste/focus window.
+	        requestAnimationFrame(tick);
+
+	        // Extra delayed restores to cover late scrollIntoView/focus operations.
+	        setTimeout(() => restorePasteScrollPosition(lockId, 'timeout50'), 50);
+	        setTimeout(() => restorePasteScrollPosition(lockId, 'timeout150'), 150);
+	    }
 
     function handleExtensionMessage(event) {
         const message = event.data;
