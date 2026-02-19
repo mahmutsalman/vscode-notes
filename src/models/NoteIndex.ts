@@ -127,6 +127,22 @@ export class NoteIndex {
     return this.data.entries.filter(entry => entry.type === type);
   }
 
+  public getNotesByColor(color: NoteColor): NoteIndexEntry[] {
+    return this.data.entries.filter(entry => entry.color === color);
+  }
+
+  public getColorStats(): Array<{ color: NoteColor; count: number }> {
+    const colorCounts = new Map<NoteColor, number>();
+    for (const entry of this.data.entries) {
+      if (entry.color) {
+        colorCounts.set(entry.color, (colorCounts.get(entry.color) || 0) + 1);
+      }
+    }
+    return Array.from(colorCounts.entries())
+      .map(([color, count]) => ({ color, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
   public searchNotes(query: string): NoteIndexEntry[] {
     if (!query.trim()) {
       return this.getAllNotes();

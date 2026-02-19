@@ -123,6 +123,23 @@
         "title": "Set Note Color",
         "category": "Notes",
         "icon": "$(symbol-color)"
+      },
+      {
+        "command": "notes.filterByColor",
+        "title": "Filter by Color",
+        "category": "Notes",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "notes.clearColorFilter",
+        "title": "Clear Color Filter",
+        "category": "Notes",
+        "icon": "$(close)"
+      },
+      {
+        "command": "notes.selectColor",
+        "title": "Select Color Filter",
+        "category": "Notes"
       }
     ],
     "keybindings": [
@@ -210,6 +227,16 @@
           "command": "notes.clearTagSearch",
           "when": "view == notes.notesView && notes.tagSearchActive",
           "group": "navigation@6"
+        },
+        {
+          "command": "notes.filterByColor",
+          "when": "view == notes.notesView",
+          "group": "navigation@7"
+        },
+        {
+          "command": "notes.clearColorFilter",
+          "when": "view == notes.notesView && notes.colorFilterActive",
+          "group": "navigation@8"
         }
       ],
       "view/item/context": [

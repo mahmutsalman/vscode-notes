@@ -203,6 +203,41 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         }),
 
+        vscode.commands.registerCommand('notes.filterByColor', async () => {
+            try {
+                await filterByColor();
+            } catch (error) {
+                console.error('Failed to filter by color:', error);
+                vscode.window.showErrorMessage(`Failed to filter by color: ${error}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('notes.clearColorFilter', () => {
+            try {
+                notesProvider.clearColorFilter();
+            } catch (error) {
+                console.error('Failed to clear color filter:', error);
+                vscode.window.showErrorMessage(`Failed to clear color filter: ${error}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('notes.selectColor', (color?: string) => {
+            try {
+                if (!color) {
+                    return;
+                }
+                // If clicking the already-active filter, clear it (toggle behavior)
+                if (notesProvider.getActiveColorFilter() === color) {
+                    notesProvider.clearColorFilter();
+                } else {
+                    notesProvider.setColorFilter(color as NoteColor);
+                }
+            } catch (error) {
+                console.error('Failed to select color:', error);
+                vscode.window.showErrorMessage(`Failed to select color: ${error}`);
+            }
+        }),
+
         // Code linking
         vscode.commands.registerCommand('notes.linkToCode', async () => {
             try {
@@ -556,6 +591,63 @@ async function filterTags() {
     }
 
     notesProvider.setTagSearchText(trimmed);
+}
+
+async function filterByColor() {
+    const index = storageService.getIndex();
+    const colorStats = index.getColorStats();
+    const currentFilter = notesProvider.getActiveColorFilter();
+
+    interface ColorFilterOption extends vscode.QuickPickItem {
+        color?: NoteColor;
+    }
+
+    const colorEmojis: Record<NoteColor, string> = {
+        red: '🔴',
+        blue: '🔵',
+        green: '🟢',
+        purple: '🟣',
+        orange: '🟠',
+        yellow: '🟡',
+        pink: '🩷',
+        cyan: '🩵'
+    };
+
+    const allColors: NoteColor[] = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'pink', 'cyan'];
+    const statsMap = new Map(colorStats.map(s => [s.color, s.count]));
+
+    const options: ColorFilterOption[] = [
+        {
+            label: 'All Colors',
+            description: currentFilter === undefined ? '(current)' : undefined,
+            detail: 'Show notes of all colors',
+            color: undefined
+        },
+        ...allColors.map(color => {
+            const count = statsMap.get(color) || 0;
+            const capitalize = color.charAt(0).toUpperCase() + color.slice(1);
+            return {
+                label: `${colorEmojis[color]} ${capitalize}`,
+                description: currentFilter === color ? `${count} notes (current)` : `${count} notes`,
+                color
+            } as ColorFilterOption;
+        })
+    ];
+
+    const selection = await vscode.window.showQuickPick(options, {
+        placeHolder: 'Filter notes by color',
+        title: 'Filter by Color'
+    });
+
+    if (!selection) {
+        return;
+    }
+
+    if (selection.color === undefined) {
+        notesProvider.clearColorFilter();
+    } else {
+        notesProvider.setColorFilter(selection.color);
+    }
 }
 
 async function sortTags() {

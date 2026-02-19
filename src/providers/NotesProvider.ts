@@ -3,6 +3,7 @@ import * as path from 'path';
 import { StorageService } from '../services/StorageService';
 import { SearchService } from '../services/SearchService';
 import { NoteIndexEntry, NoteSortOrder, TagSortOrder } from '../models/NoteIndex';
+import { NoteColor } from '../models/Note';
 
 export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
@@ -11,6 +12,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private readonly tagSortStateKey = 'notes.tagSortOrder';
     private allNotesSortOrder: NoteSortOrder;
     private activeTagFilter: string | undefined;
+    private activeColorFilter: NoteColor | undefined;
     private tagSearchText: string | undefined;
     private tagSortOrder: TagSortOrder;
 
@@ -22,6 +24,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         this.allNotesSortOrder = context.globalState.get<NoteSortOrder>(this.sortStateKey) ?? 'updated';
         this.tagSortOrder = context.globalState.get<TagSortOrder>(this.tagSortStateKey) ?? 'usage';
         void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', false);
+        void vscode.commands.executeCommand('setContext', 'notes.colorFilterActive', false);
     }
 
     refresh(): void {
@@ -89,6 +92,30 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return this.activeTagFilter;
     }
 
+    setColorFilter(color?: NoteColor): void {
+        if (this.activeColorFilter === color) {
+            return;
+        }
+
+        this.activeColorFilter = color;
+        this.updateColorFilterContext();
+        this.refresh();
+    }
+
+    clearColorFilter(): void {
+        if (this.activeColorFilter === undefined) {
+            return;
+        }
+
+        this.activeColorFilter = undefined;
+        this.updateColorFilterContext();
+        this.refresh();
+    }
+
+    getActiveColorFilter(): NoteColor | undefined {
+        return this.activeColorFilter;
+    }
+
     setTagSearchText(value?: string): void {
         const normalized = value?.trim() ?? '';
         const nextValue = normalized.length > 0 ? normalized : undefined;
@@ -131,6 +158,8 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 return this.getPinnedNotes();
             case 'recentTagsContainer':
                 return this.getRecentTags();
+            case 'colorsContainer':
+                return this.getColors();
             case 'allNotesContainer':
                 return this.getAllNotes();
             case 'searchContainer':
@@ -143,13 +172,36 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
     private async getRootItems(): Promise<TreeItem[]> {
         const stats = this.searchService.getSearchStats();
         const filterTag = this.activeTagFilter;
-        const totalNotesCount = filterTag
-            ? this.storageService.getIndex().getNotesByTag(filterTag).length
-            : stats.totalNotes;
+        const filterColor = this.activeColorFilter;
+        const index = this.storageService.getIndex();
+
+        // Calculate total notes count with both filters
+        let totalNotesCount = stats.totalNotes;
+        if (filterTag || filterColor) {
+            let entries = index.getAllNotes();
+            if (filterTag) {
+                entries = entries.filter(e => e.tags.includes(filterTag));
+            }
+            if (filterColor) {
+                entries = this.applyColorFilter(entries, filterColor);
+            }
+            totalNotesCount = entries.length;
+        }
+
+        // Calculate filtered pinned count
         const pinnedNotes = this.searchService.getPinnedNotes();
-        const filteredPinnedCount = filterTag
-            ? pinnedNotes.filter(result => result.note.tags.includes(filterTag)).length
-            : stats.pinnedNotes;
+        let filteredPinnedCount = stats.pinnedNotes;
+        if (filterTag || filterColor) {
+            let filtered = pinnedNotes;
+            if (filterTag) {
+                filtered = filtered.filter(result => result.note.tags.includes(filterTag));
+            }
+            if (filterColor) {
+                filtered = filtered.filter(result => result.note.color === filterColor);
+            }
+            filteredPinnedCount = filtered.length;
+        }
+
         const tagSortLabel = this.getTagSortLabel();
         const tagSectionLabel = this.tagSearchText
             ? `🏷️ Tags matching "${this.tagSearchText}" (${tagSortLabel})`
@@ -157,6 +209,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         const tagSectionTooltip = this.tagSearchText
             ? `Tags that include "${this.tagSearchText}" sorted by ${tagSortLabel}`
             : `Tags sorted by ${tagSortLabel}`;
+
+        // Build "All Notes" label
+        const allNotesLabel = this.buildAllNotesLabel(filterTag, filterColor, totalNotesCount, stats.totalNotes);
+        const allNotesTooltip = this.buildAllNotesTooltip(filterTag, filterColor);
+        const pinnedLabel = this.buildPinnedLabel(filterTag, filterColor, filteredPinnedCount, stats.pinnedNotes);
+        const pinnedTooltip = this.buildPinnedTooltip(filterTag, filterColor);
 
         const items: TreeItem[] = [
             new TreeItem(
@@ -166,12 +224,12 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 'search.svg'
             ),
             new TreeItem(
-                filterTag ? `📌 Pinned Notes (${filteredPinnedCount})` : `📌 Pinned Notes (${stats.pinnedNotes})`,
+                pinnedLabel,
                 vscode.TreeItemCollapsibleState.Collapsed,
                 'pinnedNotesContainer',
                 'pinned-note.svg',
                 undefined,
-                filterTag ? `Pinned notes tagged with "${filterTag}"` : undefined
+                pinnedTooltip
             ),
             new TreeItem(
                 tagSectionLabel,
@@ -182,12 +240,20 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
                 tagSectionTooltip
             ),
             new TreeItem(
-                filterTag ? `📝 Notes tagged "${filterTag}" (${totalNotesCount})` : `📝 All Notes (${stats.totalNotes})`,
+                '🎨 Colors',
+                vscode.TreeItemCollapsibleState.Collapsed,
+                'colorsContainer',
+                undefined,
+                undefined,
+                'Filter notes by color'
+            ),
+            new TreeItem(
+                allNotesLabel,
                 vscode.TreeItemCollapsibleState.Expanded,
                 'allNotesContainer',
                 'all-notes.svg',
                 undefined,
-                filterTag ? `Showing notes tagged with "${filterTag}"` : undefined
+                allNotesTooltip
             )
         ];
 
@@ -196,17 +262,24 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async getPinnedNotes(): Promise<TreeItem[]> {
         const filterTag = this.activeTagFilter;
+        const filterColor = this.activeColorFilter;
         const pinnedNotes = this.searchService.getPinnedNotes();
-        const results = filterTag
-            ? pinnedNotes.filter(result => result.note.tags.includes(filterTag))
-            : pinnedNotes;
-        
-        if (results.length === 0) {
-            const message = filterTag
-                ? `No pinned notes with "${filterTag}"`
+        let filteredResults = pinnedNotes;
+
+        if (filterTag) {
+            filteredResults = filteredResults.filter(result => result.note.tags.includes(filterTag));
+        }
+        if (filterColor) {
+            filteredResults = filteredResults.filter(result => result.note.color === filterColor);
+        }
+
+        if (filteredResults.length === 0) {
+            const hasFilter = filterTag || filterColor;
+            const message = hasFilter
+                ? 'No pinned notes matching filters'
                 : 'No pinned notes';
-            const tooltip = filterTag
-                ? '$(info) Pin a note with this tag to see it here'
+            const tooltip = hasFilter
+                ? '$(info) Pin a note matching current filters to see it here'
                 : '$(info) Right-click a note to pin it';
             return [new TreeItem(
                 message,
@@ -217,7 +290,7 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
             )];
         }
 
-        return results.map(result => this.createNoteItem(result.note));
+        return filteredResults.map(result => this.createNoteItem(result.note));
     }
 
     private async getRecentTags(): Promise<TreeItem[]> {
@@ -291,30 +364,126 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return items;
     }
 
+    private async getColors(): Promise<TreeItem[]> {
+        const index = this.storageService.getIndex();
+        const allEntries = index.getAllNotes();
+        const activeColor = this.activeColorFilter;
+
+        const colorEmojis: Record<string, string> = {
+            red: '🔴', blue: '🔵', green: '🟢', purple: '🟣',
+            orange: '🟠', yellow: '🟡', pink: '🩷', cyan: '🩵'
+        };
+        const allColors: NoteColor[] = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'pink', 'cyan'];
+
+        // Count notes per color and notes with no color
+        const colorCounts = new Map<string, number>();
+        let defaultCount = 0;
+        for (const entry of allEntries) {
+            if (entry.color) {
+                colorCounts.set(entry.color, (colorCounts.get(entry.color) || 0) + 1);
+            } else {
+                defaultCount++;
+            }
+        }
+
+        const items: TreeItem[] = [];
+
+        // "Default" item = show all notes (clear color filter)
+        const totalCount = allEntries.length;
+        const isDefaultActive = activeColor === undefined;
+        const defaultDescription = isDefaultActive
+            ? `Showing all • ${totalCount} notes`
+            : `${totalCount} notes total`;
+        const defaultItem = new TreeItem(
+            `Default (${totalCount})`,
+            vscode.TreeItemCollapsibleState.None,
+            'color',
+            undefined,
+            defaultDescription,
+            isDefaultActive ? 'Showing all notes' : 'Click to clear color filter and show all notes'
+        );
+        defaultItem.iconPath = new vscode.ThemeIcon('circle-outline');
+        defaultItem.command = {
+            command: 'notes.clearColorFilter',
+            title: 'Show All Notes'
+        };
+        items.push(defaultItem);
+
+        // Each color
+        for (const color of allColors) {
+            const count = colorCounts.get(color) || 0;
+            const capitalize = color.charAt(0).toUpperCase() + color.slice(1);
+            const noteLabel = count === 1 ? '1 note' : `${count} notes`;
+            const isActive = activeColor === color;
+            const description = isActive
+                ? `Active filter • ${noteLabel}`
+                : `${noteLabel}`;
+            const tooltip = isActive
+                ? `Filtering notes by ${color}`
+                : `Click to show only ${color} notes`;
+
+            const item = new TreeItem(
+                `${colorEmojis[color]} ${capitalize} (${count})`,
+                vscode.TreeItemCollapsibleState.None,
+                'color',
+                undefined,
+                description,
+                tooltip
+            );
+            item.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor(`notes.color.${color}`));
+            item.command = {
+                command: 'notes.selectColor',
+                title: 'Filter by Color',
+                arguments: [color]
+            };
+            items.push(item);
+        }
+
+        return items;
+    }
+
     private async getAllNotes(): Promise<TreeItem[]> {
         const filterTag = this.activeTagFilter;
+        const filterColor = this.activeColorFilter;
+        const hasFilter = filterTag || filterColor;
 
-        if (filterTag) {
-            const noteResults = this.searchService.searchByTag(filterTag);
-            const clearFilterItem = this.createClearFilterItem();
+        if (hasFilter) {
+            // Get entries based on tag filter or all entries
+            const index = this.storageService.getIndex();
+            let entries = filterTag
+                ? index.getNotesByTag(filterTag)
+                : index.getAllNotes();
 
-            if (noteResults.length === 0) {
+            // Apply color filter
+            if (filterColor) {
+                entries = this.applyColorFilter(entries, filterColor);
+            }
+
+            const clearItems: TreeItem[] = [];
+            if (filterTag) {
+                clearItems.push(this.createClearFilterItem());
+            }
+            if (filterColor) {
+                clearItems.push(this.createClearColorFilterItem());
+            }
+
+            if (entries.length === 0) {
                 return [
-                    clearFilterItem,
+                    ...clearItems,
                     new TreeItem(
-                        `No notes found with "${filterTag}"`,
+                        'No notes matching filters',
                         vscode.TreeItemCollapsibleState.None,
                         'empty',
                         undefined,
-                        'Select another tag or clear the filter to see all notes'
+                        'Adjust or clear filters to see notes'
                     )
                 ];
             }
 
-            const limitedResults = noteResults.slice(0, 50);
+            const limitedEntries = entries.slice(0, 50);
             return [
-                clearFilterItem,
-                ...limitedResults.map(result => this.createNoteItem(result.note))
+                ...clearItems,
+                ...limitedEntries.map(entry => this.createNoteItem(entry))
             ];
         }
 
@@ -403,6 +572,25 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         return item;
     }
 
+    private createClearColorFilterItem(): TreeItem {
+        const item = new TreeItem(
+            'Show all colors',
+            vscode.TreeItemCollapsibleState.None,
+            'clearColorFilter',
+            undefined,
+            'Clear color filter',
+            'Clear the active color filter and show all notes'
+        );
+
+        item.iconPath = new vscode.ThemeIcon('clear-all');
+        item.command = {
+            command: 'notes.clearColorFilter',
+            title: 'Show All Colors'
+        };
+
+        return item;
+    }
+
     private createClearTagSearchItem(): TreeItem {
         const item = new TreeItem(
             'Clear tag search',
@@ -426,6 +614,10 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', this.tagSearchText !== undefined);
     }
 
+    private updateColorFilterContext(): void {
+        void vscode.commands.executeCommand('setContext', 'notes.colorFilterActive', this.activeColorFilter !== undefined);
+    }
+
     private getTagSortLabel(): string {
         switch (this.tagSortOrder) {
             case 'created':
@@ -436,6 +628,61 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
             default:
                 return 'Most used';
         }
+    }
+
+    private applyColorFilter(entries: NoteIndexEntry[], filterColor: NoteColor): NoteIndexEntry[] {
+        return entries.filter(e => e.color === filterColor);
+    }
+
+    private capitalizeColor(color: NoteColor): string {
+        return color.charAt(0).toUpperCase() + color.slice(1);
+    }
+
+    private buildAllNotesLabel(filterTag: string | undefined, filterColor: NoteColor | undefined, filteredCount: number, totalCount: number): string {
+        if (filterTag && filterColor) {
+            return `📝 ${this.capitalizeColor(filterColor)} notes tagged "${filterTag}" (${filteredCount})`;
+        }
+        if (filterColor) {
+            return `📝 ${this.capitalizeColor(filterColor)} Notes (${filteredCount})`;
+        }
+        if (filterTag) {
+            return `📝 Notes tagged "${filterTag}" (${filteredCount})`;
+        }
+        return `📝 All Notes (${totalCount})`;
+    }
+
+    private buildAllNotesTooltip(filterTag: string | undefined, filterColor: NoteColor | undefined): string | undefined {
+        if (filterTag && filterColor) {
+            return `Showing ${filterColor} notes tagged with "${filterTag}"`;
+        }
+        if (filterColor) {
+            return `Showing ${filterColor} notes`;
+        }
+        if (filterTag) {
+            return `Showing notes tagged with "${filterTag}"`;
+        }
+        return undefined;
+    }
+
+    private buildPinnedLabel(filterTag: string | undefined, filterColor: NoteColor | undefined, filteredCount: number, totalCount: number): string {
+        if (filterTag || filterColor) {
+            return `📌 Pinned Notes (${filteredCount})`;
+        }
+        return `📌 Pinned Notes (${totalCount})`;
+    }
+
+    private buildPinnedTooltip(filterTag: string | undefined, filterColor: NoteColor | undefined): string | undefined {
+        const parts: string[] = [];
+        if (filterTag) {
+            parts.push(`tagged with "${filterTag}"`);
+        }
+        if (filterColor) {
+            parts.push(`colored ${filterColor}`);
+        }
+        if (parts.length > 0) {
+            return `Pinned notes ${parts.join(' and ')}`;
+        }
+        return undefined;
     }
 
     private formatTimestamp(timestamp: number): string {
