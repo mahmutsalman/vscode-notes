@@ -258,15 +258,19 @@
             }
         });
         
-        // Image right-click context menu
+        // Image right-click context menu (Shift+Right-click cycles color)
         document.addEventListener('contextmenu', function(e) {
             if (e.target.classList.contains('thumbnail')) {
                 e.preventDefault(); // Prevent default context menu
-                
+
                 const imageItem = e.target.closest('.image-item');
                 const imageId = imageItem.dataset.imageId;
-                
-                showImageContextMenu(e, imageId);
+
+                if (e.shiftKey) {
+                    cycleImageColor(imageId);
+                } else {
+                    showImageContextMenu(e, imageId);
+                }
             }
         });
         
@@ -802,17 +806,24 @@
         
         handleContextMenu(event) {
             event.preventDefault(); // Prevent default context menu
-            
+
             if (this.images.length === 0) return;
-            
-            // Get the current image ID
+
+            // Get the current image
             const currentImage = this.images[this.currentIndex];
             const imageId = currentImage.id;
-            
-            console.log('🖼️ Right-click on modal image:', imageId);
-            
-            // Show the same context menu as thumbnails
-            showImageContextMenu(event, imageId);
+
+            if (event.shiftKey) {
+                // Shift+Right-click: cycle color
+                const colorCycle = [undefined, 'green', 'blue', 'purple'];
+                const currentColorIndex = colorCycle.indexOf(currentImage.color);
+                const nextColor = colorCycle[(currentColorIndex + 1) % colorCycle.length];
+                this.assignColorToCurrentImage(nextColor || '');
+            } else {
+                // Regular right-click: show context menu
+                console.log('🖼️ Right-click on modal image:', imageId);
+                showImageContextMenu(event, imageId);
+            }
         }
         
         handleMouseDown(event) {
@@ -2148,6 +2159,26 @@
             });
         } else {
             console.error('❌ window.vscode not available');
+        }
+    }
+
+    function cycleImageColor(imageId) {
+        if (!currentNote || !currentNote.images) return;
+        const image = currentNote.images.find(img => img.id === imageId);
+        if (!image) return;
+
+        const colorCycle = [undefined, 'green', 'blue', 'purple'];
+        const currentColorIndex = colorCycle.indexOf(image.color);
+        const nextColor = colorCycle[(currentColorIndex + 1) % colorCycle.length];
+
+        if (window.vscode) {
+            window.vscode.postMessage({
+                command: 'updateImageColor',
+                data: {
+                    imageId: image.id,
+                    color: nextColor
+                }
+            });
         }
     }
 
