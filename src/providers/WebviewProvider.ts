@@ -110,6 +110,9 @@ export class WebviewProvider {
             case 'updateImageColor':
                 await this.updateImageColor(message.data, noteId, panel);
                 break;
+            case 'updateImageCaption':
+                await this.updateImageCaption(message.data, noteId, panel);
+                break;
             case 'openImageInRightEditor':
                 await this.openImageInRightEditor(message.data, noteId);
                 break;
@@ -409,6 +412,38 @@ export class WebviewProvider {
             console.error('❌ Failed to update image color:', error);
             panel.webview.postMessage({
                 command: 'imageColorError',
+                data: { error: (error as Error).toString() }
+            });
+        }
+    }
+
+    private async updateImageCaption(data: any, noteId: string, panel: vscode.WebviewPanel): Promise<void> {
+        try {
+            const note = await this.storageService.loadNote(noteId);
+            if (!note) {
+                throw new Error('Note not found');
+            }
+
+            const success = note.updateImageCaption(data.imageId, data.caption);
+            if (!success) {
+                throw new Error('Image not found');
+            }
+
+            await this.storageService.saveNote(note);
+            this.searchService.updateIndex(this.storageService.getIndex());
+
+            panel.webview.postMessage({
+                command: 'imageCaptionUpdated',
+                data: {
+                    imageId: data.imageId,
+                    caption: data.caption?.trim().substring(0, 500) || ''
+                }
+            });
+
+        } catch (error) {
+            console.error('Failed to update image caption:', error);
+            panel.webview.postMessage({
+                command: 'imageCaptionError',
                 data: { error: (error as Error).toString() }
             });
         }

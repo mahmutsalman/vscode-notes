@@ -102,6 +102,21 @@ export class NoteModel implements Note {
     return false;
   }
 
+  public updateImageCaption(imageId: string, caption?: string): boolean {
+    const image = this.images.find(img => img.id === imageId);
+    if (image) {
+      const trimmed = caption?.trim();
+      if (trimmed) {
+        image.caption = trimmed.substring(0, 500);
+      } else {
+        delete image.caption;
+      }
+      this.updated = Date.now();
+      return true;
+    }
+    return false;
+  }
+
   public getLastImage(): NoteImage | undefined {
     return this.images.length > 0 ? this.images[this.images.length - 1] : undefined;
   }

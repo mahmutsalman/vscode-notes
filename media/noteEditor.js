@@ -1411,8 +1411,18 @@
         menu.style.minWidth = '180px';
         menu.style.padding = '4px 0';
 
+        // Determine caption label based on whether a caption already exists
+        const existingImage = currentNote && currentNote.images
+            ? currentNote.images.find(img => img.id === imageId)
+            : null;
+        const captionLabel = existingImage && existingImage.caption ? '✏️ Edit Caption' : '✏️ Add Caption';
+
         // Menu items
         const menuItems = [
+            {
+                text: captionLabel,
+                action: () => openCaptionEditor(imageId)
+            },
             {
                 text: '🖼️ Open in Right Editor',
                 action: () => openImageInRightEditor(imageId)
@@ -1484,6 +1494,165 @@
                 command: 'openImageGalleryInRightEditor',
                 data: {}
             });
+        }
+    }
+
+    function openCaptionEditor(imageId) {
+        // Look up the current caption
+        const image = currentNote && currentNote.images
+            ? currentNote.images.find(img => img.id === imageId)
+            : null;
+        const currentCaption = image ? (image.caption || '') : '';
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'caption-editor-overlay';
+
+        const modal = document.createElement('div');
+        modal.className = 'caption-editor-modal';
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'caption-editor-header';
+        const title = document.createElement('span');
+        title.className = 'caption-editor-title';
+        title.textContent = currentCaption ? 'Edit Caption' : 'Add Caption';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'caption-editor-close';
+        closeBtn.textContent = '✕';
+        closeBtn.title = 'Close (Escape)';
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        // Textarea
+        const textarea = document.createElement('textarea');
+        textarea.className = 'caption-editor-textarea';
+        textarea.value = currentCaption;
+        textarea.maxLength = 500;
+        textarea.placeholder = 'Enter a caption for this image...';
+        textarea.rows = 4;
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.className = 'caption-editor-footer';
+        const counter = document.createElement('span');
+        counter.className = 'caption-editor-counter';
+        counter.textContent = `${currentCaption.length}/500`;
+        const buttons = document.createElement('div');
+        buttons.className = 'caption-editor-buttons';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-secondary caption-editor-cancel';
+        cancelBtn.textContent = 'Cancel';
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn btn-primary caption-editor-save';
+        saveBtn.textContent = 'Save';
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(saveBtn);
+        footer.appendChild(counter);
+        footer.appendChild(buttons);
+
+        modal.appendChild(header);
+        modal.appendChild(textarea);
+        modal.appendChild(footer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Focus the textarea
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+        // Update character counter
+        function updateCounter() {
+            const len = textarea.value.length;
+            counter.textContent = `${len}/500`;
+            if (len >= 500) {
+                counter.classList.add('at-limit');
+                counter.classList.remove('near-limit');
+            } else if (len >= 450) {
+                counter.classList.add('near-limit');
+                counter.classList.remove('at-limit');
+            } else {
+                counter.classList.remove('near-limit', 'at-limit');
+            }
+        }
+        textarea.addEventListener('input', updateCounter);
+
+        // Save handler
+        function save() {
+            const caption = textarea.value.trim();
+            if (window.vscode) {
+                window.vscode.postMessage({
+                    command: 'updateImageCaption',
+                    data: { imageId: imageId, caption: caption }
+                });
+            }
+            closeEditor();
+        }
+
+        // Close handler
+        function closeEditor() {
+            if (overlay.parentNode) {
+                overlay.remove();
+            }
+        }
+
+        // Event listeners
+        closeBtn.addEventListener('click', closeEditor);
+        cancelBtn.addEventListener('click', closeEditor);
+        saveBtn.addEventListener('click', save);
+
+        // Click outside closes
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                closeEditor();
+            }
+        });
+
+        // Keyboard shortcuts
+        textarea.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                closeEditor();
+            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                save();
+            }
+        });
+    }
+
+    function updateImageCaptionDisplay(imageId, caption) {
+        // Update local state
+        if (currentNote && currentNote.images) {
+            const image = currentNote.images.find(img => img.id === imageId);
+            if (image) {
+                if (caption) {
+                    image.caption = caption;
+                } else {
+                    delete image.caption;
+                }
+            }
+        }
+
+        // Update DOM
+        const imageItem = document.querySelector(`.image-item[data-image-id="${imageId}"]`);
+        if (!imageItem) return;
+
+        const existingCaption = imageItem.querySelector('.image-caption');
+
+        if (caption) {
+            if (existingCaption) {
+                existingCaption.textContent = caption;
+            } else {
+                const captionEl = document.createElement('p');
+                captionEl.className = 'image-caption';
+                captionEl.textContent = caption;
+                imageItem.appendChild(captionEl);
+            }
+        } else {
+            if (existingCaption) {
+                existingCaption.remove();
+            }
         }
     }
 
@@ -1816,7 +1985,16 @@
             case 'imageColorError':
                 showNotification('Failed to update image color: ' + message.data.error, 'error');
                 break;
-                
+
+            case 'imageCaptionUpdated':
+                updateImageCaptionDisplay(message.data.imageId, message.data.caption);
+                showNotification('Caption updated', 'success');
+                break;
+
+            case 'imageCaptionError':
+                showNotification('Failed to update caption: ' + message.data.error, 'error');
+                break;
+
         }
     }
 

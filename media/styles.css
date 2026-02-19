@@ -392,6 +392,10 @@ body {
     color: var(--vscode-descriptionForeground);
     margin: 0;
     border-top: 1px solid var(--vscode-panel-border);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Linked Files */
@@ -1126,6 +1130,112 @@ body {
 .context-menu-item:hover {
     background-color: var(--vscode-menu-selectionBackground);
     color: var(--vscode-menu-selectionForeground);
+}
+
+/* Caption Editor Modal */
+.caption-editor-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.caption-editor-modal {
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    width: 420px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+}
+
+.caption-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.caption-editor-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--vscode-foreground);
+}
+
+.caption-editor-close {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--border-radius);
+    opacity: 0.7;
+}
+
+.caption-editor-close:hover {
+    opacity: 1;
+    background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.caption-editor-textarea {
+    margin: 12px 16px;
+    padding: 8px 10px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: var(--border-radius);
+    font-family: var(--vscode-font-family);
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+}
+
+.caption-editor-textarea:focus {
+    border-color: var(--vscode-focusBorder);
+}
+
+.caption-editor-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px 12px;
+}
+
+.caption-editor-counter {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.caption-editor-counter.near-limit {
+    color: var(--vscode-editorWarning-foreground);
+}
+
+.caption-editor-counter.at-limit {
+    color: var(--vscode-editorError-foreground);
+    font-weight: 600;
+}
+
+.caption-editor-buttons {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.caption-editor-cancel,
+.caption-editor-save {
+    padding: 4px 14px;
+    font-size: 13px;
 }
 
 /* Images Header with Gallery Button */
