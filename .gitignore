@@ -8,6 +8,9 @@ out/
 # VS Code specific
 .vscode/
 .tours/
+
+# Claude Code
+.claude/
 *.vsix
 
 # Local resources (personal notes)
