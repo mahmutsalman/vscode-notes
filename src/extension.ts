@@ -69,7 +69,11 @@ async function initializeServices(context: vscode.ExtensionContext) {
 function registerProviders(context: vscode.ExtensionContext) {
     // Create and register the notes tree view provider
     notesProvider = new NotesProvider(storageService, searchService, context);
-    vscode.window.registerTreeDataProvider('notes.notesView', notesProvider);
+    const treeView = vscode.window.createTreeView('notes.notesView', {
+        treeDataProvider: notesProvider,
+        dragAndDropController: notesProvider
+    });
+    context.subscriptions.push(treeView);
     
     // Create webview provider
     webviewProvider = new WebviewProvider(

@@ -5,7 +5,10 @@ import { SearchService } from '../services/SearchService';
 import { NoteIndexEntry, NoteSortOrder, TagSortOrder } from '../models/NoteIndex';
 import { NoteColor } from '../models/Note';
 
-export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
+export class NotesProvider implements vscode.TreeDataProvider<TreeItem>, vscode.TreeDragAndDropController<TreeItem> {
+    readonly dropMimeTypes: string[] = [];
+    readonly dragMimeTypes: string[] = ['text/uri-list'];
+
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
     private readonly sortStateKey = 'notes.allNotesSortOrder';
@@ -25,6 +28,21 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         this.tagSortOrder = context.globalState.get<TagSortOrder>(this.tagSortStateKey) ?? 'usage';
         void vscode.commands.executeCommand('setContext', 'notes.tagSearchActive', false);
         void vscode.commands.executeCommand('setContext', 'notes.colorFilterActive', false);
+    }
+
+    handleDrag(source: readonly TreeItem[], dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): void {
+        const uris: vscode.Uri[] = [];
+        for (const item of source) {
+            if (item.noteId) {
+                const entry = this.storageService.getIndex().findById(item.noteId);
+                if (entry) {
+                    uris.push(vscode.Uri.file(entry.filePath));
+                }
+            }
+        }
+        if (uris.length > 0) {
+            dataTransfer.set('text/uri-list', new vscode.DataTransferItem(uris.map(u => u.toString()).join('\r\n')));
+        }
     }
 
     refresh(): void {
@@ -539,6 +557,9 @@ export class NotesProvider implements vscode.TreeDataProvider<TreeItem> {
         // Set the icon with color support
         item.iconPath = this.getIconForNoteType(note.type, note.isPinned, note.color);
         item.tooltip = tooltip;
+
+        // Set resourceUri for native drag-and-drop file path support
+        item.resourceUri = vscode.Uri.file(note.filePath);
 
         // Store note ID for context menu commands
         item.noteId = note.id;
